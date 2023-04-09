@@ -37,8 +37,8 @@ dependencies:
   cupertino_icons: ^1.0.2
   device_info_plus: ^3.2.3
   event: ^2.1.2
+  riverpod: ^2.0.2
   flutter_riverpod: ^2.0.2
-
 
 dev_dependencies:
   flutter_test:

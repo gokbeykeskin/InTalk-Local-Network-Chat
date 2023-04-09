@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:local_chat/custom_widgets/inchat_appbar.dart';
-import 'package:local_chat/screens/contacts_screen.dart';
+import 'package:local_chat/custom_widgets/default_appbar.dart';
+import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: <Widget>[
             const Text(
-              'InChat',
+              '',
               style: TextStyle(
                   fontSize: 50.0,
                   fontWeight: FontWeight.bold,

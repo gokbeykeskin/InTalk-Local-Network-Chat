@@ -6,15 +6,15 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 
-import '../screens/chat_screen/chat_screen.dart';
-import '../screens/chat_screen/custom_widgets/message_box.dart';
 import '../utils/messaging_protocol.dart';
-import '../screens/contacts_screen.dart';
+import '../screens/contacts_screen/contacts_screen.dart';
 
 class NewMessageEventArgs extends EventArgs {
   final String message;
   final String sender;
-  NewMessageEventArgs(this.message, this.sender);
+  final String receiver;
+  NewMessageEventArgs(
+      {required this.message, required this.sender, required this.receiver});
 }
 
 class GetMacAddress {
@@ -45,14 +45,28 @@ class LocalNetworkChatClient {
   User user;
   Socket? socket;
   static var broadcastMessageReceivedEvent = Event();
+  static var privateMessageReceivedEvent = Event();
   static var usersUpdatedEvent = Event();
   static var becomeServerEvent = Event();
   static var connectToNewServerEvent = Event();
+
+  String? _networkIpAdress;
+  String? _networkIpWithoutLastDigits;
+
   bool connected = false;
   LocalNetworkChatClient({required this.user});
 
-  // Connect to the server
-  Future<void> connect(int lastIpDigit) async {
+  Future<void> init() async {
+    _networkIpAdress = await _getNetworkIPAdress();
+
+    List<String> components = _networkIpAdress!.split('.');
+
+    // Remove the last subpart
+    components.removeLast();
+
+    // Join the remaining subpart back into an IP address string
+    _networkIpWithoutLastDigits = '${components.join('.')}.';
+
     try {
       user.macAddress = (await GetMacAddress.getId())!;
     } catch (e) {
@@ -61,17 +75,23 @@ class LocalNetworkChatClient {
         user.macAddress = "11223344"; //for macos debugging
       }
     }
+  }
+
+  // Connect to the server
+  Future<void> connect(int lastIpDigit) async {
     var ipAddress = lastIpDigit == -1
-        ? await _getNetworkIPAdress()
-        : await _getNetworkIpWithoutLastDigits() + lastIpDigit.toString();
+        ? _networkIpAdress
+        : _networkIpWithoutLastDigits! + lastIpDigit.toString();
 
     // Connect to the server socket
     try {
       socket = await Socket.connect(ipAddress, 12345,
-          timeout: const Duration(milliseconds: 80));
+          timeout: const Duration(milliseconds: 2000));
       user.port = socket?.port;
       connected = true;
-      print('Successfully connected to the server: $ipAddress:12345');
+      if (kDebugMode) {
+        print('Successfully connected to the server: $ipAddress:12345');
+      }
     } catch (e) {
       if (kDebugMode) {
         print("Tried:$ipAddress");
@@ -93,11 +113,18 @@ class LocalNetworkChatClient {
     usersUpdatedEvent.unsubscribeAll();
     becomeServerEvent.unsubscribeAll();
     connectToNewServerEvent.unsubscribeAll();
+    broadcastMessageReceivedEvent.unsubscribeAll();
+    privateMessageReceivedEvent.unsubscribeAll();
     await socket?.close();
   }
 
   void sendBroadcastMessage(String message) {
     sendMessage("${MessagingProtocol.broadcast}@${user.macAddress}@$message");
+  }
+
+  void sendPrivateMessage(String message, User receiver) {
+    sendMessage(
+        "${MessagingProtocol.private}@${user.macAddress}@${receiver.port}@$message");
   }
 
   // Send a message to the server
@@ -131,19 +158,21 @@ class LocalNetworkChatClient {
       handleConnectToNewServer(split);
     } else if (split[0] == MessagingProtocol.broadcast) {
       handleBroadcastMessage(split);
+    } else if (split[0] == MessagingProtocol.private) {
+      handlePrivateMessage(split);
     }
   }
 
   void handleHeartbeat(List<String> split) {
-    //if (split[1] != user.macAddress) {
-    //kendini listelemek istiyosan bunu aç.
-    if (kDebugMode) {
-      print("New user added: ${split[2]}");
+    if (split[1] != user.macAddress) {
+      //kendini listelemek istiyosan bunu aç.
+      if (kDebugMode) {
+        print("New user added: ${split[2]}");
+      }
+      ContactsScreen.loggedInUsers.add(User(
+          macAddress: split[1], name: split[2], port: int.parse(split[3])));
+      usersUpdatedEvent.broadcast();
     }
-    ContactsScreen.loggedInUsers.add(
-        User(macAddress: split[1], name: split[2], port: int.parse(split[3])));
-    usersUpdatedEvent.broadcast();
-    //}
   }
 
 //handle when some other client logged out
@@ -167,34 +196,25 @@ class LocalNetworkChatClient {
   void handleBroadcastMessage(List<String> split) {
     if (split[1] != user.macAddress) {
       broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
-        split[2], //message
-        ContactsScreen.loggedInUsers
-            .firstWhere((element) => element.macAddress == split[1])
-            .name, //sender
-      ));
+          message: split[2], //message
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere((element) => element.macAddress == split[1])
+              .name,
+          receiver: "General Message" //sender
+          ));
     }
+  }
+
+  void handlePrivateMessage(List<String> split) {
+    privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
+        message: split[3], //message
+        sender: ContactsScreen.loggedInUsers
+            .firstWhere((element) => element.macAddress == split[1])
+            .name,
+        receiver: "Private Message"));
   }
 
   //util functions--------------------------------------------------------------
-  Future<String> _getNetworkIpWithoutLastDigits() async {
-    String ipAddress = '';
-    List<NetworkInterface> interfaces = await NetworkInterface.list();
-    for (NetworkInterface interface in interfaces) {
-      if (interface.name.startsWith('wlan') ||
-          interface.name.startsWith('en')) {
-        ipAddress = interface.addresses.first.address;
-        break;
-      }
-    }
-    // Split the IP address into subparts
-    List<String> components = ipAddress.split('.');
-
-    // Remove the last subpart
-    components.removeLast();
-
-    // Join the remaining subpart back into an IP address string
-    return '${components.join('.')}.';
-  }
 
   Future<String> _getNetworkIPAdress() async {
     List<NetworkInterface> interfaces = await NetworkInterface.list();

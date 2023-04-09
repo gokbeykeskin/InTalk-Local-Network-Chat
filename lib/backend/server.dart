@@ -2,9 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 
-import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
-import 'package:local_chat/screens/contacts_screen.dart';
+import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../utils/messaging_protocol.dart';
 import 'client.dart';
@@ -12,10 +11,12 @@ import 'client.dart';
 class LocalNetworkChat {
   // Create a server socket that listens for incoming client connections
   ServerSocket? serverSocket;
-  // A list of connected sockets (i.e., clients)
+  // A list of connected sockets
   List<Socket> connectedSockets = [];
-
+  //the user which logged in from this device.
+  User myUser;
   // Start the server socket and listen for incoming client connections
+  LocalNetworkChat({required this.myUser});
   Future<void> start() async {
     // Get the IP address of the local device
     var ipAddress = await _getNetworkIPAdress();
@@ -38,13 +39,20 @@ class LocalNetworkChat {
         if (kDebugMode) {
           print('Message from Client:$message');
         }
-        processMessages(message, socket);
+        parseMessages(message, socket);
       }, onDone: () {
         //when a client closes a socket
         // Remove the socket from the list of connected sockets
         connectedSockets.remove(socket);
         //send the logout message to all clients
-        sendMessageToAll('${MessagingProtocol.logout}@${socket.remotePort}');
+        try {
+          sendMessageToAll('${MessagingProtocol.logout}@${socket.remotePort}');
+        } catch (e) {
+          if (kDebugMode) {
+            print(
+                "Server was the logged out client. No need to send logout message to other clients");
+          }
+        }
       });
     });
   }
@@ -62,10 +70,12 @@ class LocalNetworkChat {
     // Close the server socket to stop accepting new client connections
     await serverSocket?.close();
 
+    List<Future<void>> socketFutures = [];
     // Close all existing client connections
     for (var clientSocket in connectedSockets) {
-      await clientSocket.close();
+      socketFutures.add(clientSocket.close());
     }
+    await Future.wait(socketFutures);
     connectedSockets.clear();
   }
 
@@ -118,25 +128,40 @@ class LocalNetworkChat {
         processHeartbeat(message, socket);
       } else if (split[0] == MessagingProtocol.broadcast) {
         if (kDebugMode) {
-          print("BROADCAST RECEIVED FROM ${split[2]}");
+          print("BROADCAST RECEIVED FROM ${split[1]}");
         }
         processBroadcast(message, socket);
+      } else if (split[0] == MessagingProtocol.private) {
+        if (kDebugMode) {
+          print("PRIVATE MESSAGE RECEIVED FROM ${split[1]}");
+        }
+        processPrivateMessage(message, socket);
       }
     }
   }
 
   void processHeartbeat(String message, Socket socket) async {
-    sendMessageToAll(message); //send new client to all logged in clients
+    sendMessageToAllExcept(
+        message, socket); //send new client to all logged in clients
     for (var user in ContactsScreen.loggedInUsers) {
       //send all logged in clients to the new client
       sendMessage(
           '${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${user.port}',
           socket);
     }
+    sendMessage(
+        '${MessagingProtocol.heartbeat}@${myUser.macAddress}@${myUser.name}@${myUser.port}',
+        socket);
   }
 
   void processBroadcast(String message, Socket socket) {
     sendMessageToAllExcept(message, socket);
+  }
+
+  void processPrivateMessage(String message, Socket socket) {
+    var split = message.split("@");
+
+    sendMessageToPort(message, int.parse(split[2]));
   }
 
   Future<String> _getNetworkIPAdress() async {

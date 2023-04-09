@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 class MessageBox extends StatelessWidget {
@@ -19,22 +18,25 @@ class MessageBox extends StatelessWidget {
           constraints:
               BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 60),
           child: Card(
+              color: alignment == Alignment.centerLeft
+                  ? Colors.blue[100]
+                  : Colors.green[100],
               child: Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  sender,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      sender,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(message),
+                  ],
                 ),
-                Text(message),
-              ],
-            ),
-          ))),
+              ))),
     );
   }
 }

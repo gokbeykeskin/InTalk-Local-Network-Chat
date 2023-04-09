@@ -1,4 +1,4 @@
-# group_chat_simp
+# InTalk-Local-Network-Chat
 
 A new Flutter project.
 

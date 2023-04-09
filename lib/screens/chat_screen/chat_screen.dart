@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
-import 'package:event/event.dart';
+import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
+
 import '../../backend/client.dart';
 
 class Message {
@@ -14,7 +13,7 @@ class Message {
 
 class ChatScreen extends StatefulWidget {
   final bool isGeneralChat;
-  final User? receiver;
+  final User receiver;
   final LocalNetworkChatClient meClient;
   const ChatScreen(
       {super.key,
@@ -32,15 +31,30 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    if (mounted) {
+      if (ContactsScreen.messages[widget.receiver] == null) {
+        //if there is no message for this receiver, create a new list.
+        ContactsScreen.messages[widget.receiver] = messages;
+      } else {
+        //if there is a message for this receiver, get it from the map.
+        setState(() {
+          messages = ContactsScreen.messages[widget.receiver]!;
+        });
+      }
+    }
     if (widget.isGeneralChat) {
       LocalNetworkChatClient.broadcastMessageReceivedEvent.subscribe((args) {
         if (mounted) {
           setState(() {
-            messages.insert(
-                0,
-                Message(
-                    message: (args as NewMessageEventArgs).message,
-                    sender: args.sender));
+            messages;
+          });
+        }
+      });
+    } else {
+      LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) {
+        if (mounted) {
+          setState(() {
+            messages;
           });
         }
       });
@@ -62,7 +76,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return !widget.isGeneralChat
         ? AppBar(
             title: ChatTitle(
-              toChatUser: User(name: widget.receiver!.name),
+              toChatUser: User(name: widget.receiver.name),
             ),
             centerTitle: true,
           )
@@ -115,6 +129,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
             if (widget.isGeneralChat) {
               widget.meClient.sendBroadcastMessage(value);
+            } else {
+              widget.meClient.sendPrivateMessage(value, widget.receiver);
             }
             if (value.isNotEmpty) {
               textFieldController.clear();

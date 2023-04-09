@@ -1,4 +1,4 @@
-package com.example.group_chat_simp
+package com.example.intalk
 
 import io.flutter.embedding.android.FlutterActivity
 

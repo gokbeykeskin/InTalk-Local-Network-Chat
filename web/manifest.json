@@ -1,6 +1,6 @@
 {
-    "name": "group_chat_simp",
-    "short_name": "group_chat_simp",
+    "name": "InTalk-Local-Network-Chat",
+    "short_name": "InTalk-Local-Network-Chat",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

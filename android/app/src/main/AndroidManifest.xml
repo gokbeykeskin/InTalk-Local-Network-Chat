@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.group_chat_simp">
+    package="com.example.intalk">
     <uses-permission android:name="android.permission.INTERNET" />
    <application
         android:label="InTalk Local Network Chat"

@@ -1,9 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:local_chat/backend/client.dart';
 import 'package:local_chat/backend/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
 import 'package:local_chat/screens/home_screen.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'custom_widgets/contact.dart';
 
@@ -210,15 +215,20 @@ class _ContactsScreenState extends State<ContactsScreen>
       connectToNewServer();
     });
 
-    LocalNetworkChatClient.broadcastMessageReceivedEvent.subscribe((args) {
+    LocalNetworkChatClient.broadcastMessageReceivedEvent
+        .subscribe((args) async {
+      args as NewMessageEventArgs;
+      File? file;
+      if (args.imageBytes != null) {
+        file = File('${(await _localPath)}/${generateRandomString(5)}.png');
+        await file.create();
+        await file.writeAsBytes(args.imageBytes!);
+      }
       if (ContactsScreen.messages[ContactsScreen.generalChatUser] == null) {
         ContactsScreen.messages[ContactsScreen.generalChatUser] = [];
       }
       ContactsScreen.messages[ContactsScreen.generalChatUser]!.insert(
-          0,
-          Message(
-              message: (args as NewMessageEventArgs).message,
-              sender: args.sender));
+          0, Message(message: args.message, sender: args.sender, image: file));
     });
 
     LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) {
@@ -239,5 +249,17 @@ class _ContactsScreenState extends State<ContactsScreen>
     return ContactsScreen.loggedInUsers.firstWhere((element) {
       return element.name == name;
     });
+  }
+
+  Future<String> get _localPath async {
+    final directory = await getTemporaryDirectory();
+
+    return directory.path;
+  }
+
+  String generateRandomString(int len) {
+    var random = Random.secure();
+    var values = List<int>.generate(len, (i) => random.nextInt(255));
+    return base64Encode(values);
   }
 }

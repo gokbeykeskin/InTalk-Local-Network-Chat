@@ -136,6 +136,10 @@ class LocalNetworkChat {
           print("PRIVATE MESSAGE RECEIVED FROM ${split[1]}");
         }
         processPrivateMessage(message, socket);
+      } else if (split[0] == MessagingProtocol.broadcastImage ||
+          split[0] == MessagingProtocol.broadcastImageContd ||
+          split[0] == MessagingProtocol.broadcastImageEnd) {
+        processBroadcastImage(message, socket);
       }
     }
   }
@@ -162,6 +166,10 @@ class LocalNetworkChat {
     var split = message.split("@");
 
     sendMessageToPort(message, int.parse(split[2]));
+  }
+
+  void processBroadcastImage(String message, Socket socket) {
+    sendMessageToAllExcept(message, socket);
   }
 
   Future<String> _getNetworkIPAdress() async {

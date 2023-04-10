@@ -1,14 +1,21 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../../backend/client.dart';
+import '../select_photo_options_screen.dart';
 
 class Message {
   final String? sender;
   final String message;
-  Message({required this.message, this.sender});
+  final File? image;
+  Message({required this.message, this.sender, this.image});
 }
 
 class ChatScreen extends StatefulWidget {
@@ -94,11 +101,13 @@ class _ChatScreenState extends State<ChatScreen> {
               return MessageBox(
                   sender: messages[index].sender!,
                   message: messages[index].message,
+                  image: messages[index].image,
                   alignment: Alignment.centerRight);
             } else {
               return MessageBox(
                   sender: messages[index].sender!,
                   message: messages[index].message,
+                  image: messages[index].image,
                   alignment: Alignment.centerLeft);
             }
           }),
@@ -142,11 +151,66 @@ class _ChatScreenState extends State<ChatScreen> {
           height: 50,
           child: IconButton(
               padding: const EdgeInsets.all(0.0),
-              onPressed: () {},
+              onPressed: () {
+                _showSelectPhotoOptions(context);
+              },
               color: Colors.blue,
               icon: const Icon(Icons.image, size: 50)),
         ),
       ]),
+    );
+  }
+
+  Future _pickImage(ImageSource source) async {
+    try {
+      final image = await ImagePicker().pickImage(source: source);
+      if (image == null) return;
+      File? img = File(image.path);
+      img = await _cropImage(imageFile: img);
+
+      widget.meClient.sendBroadcastImage(img!.readAsBytesSync());
+      setState(() {
+        messages.insert(
+            0,
+            Message(
+                sender: widget.meClient.user.name, message: "", image: img));
+        Navigator.of(context).pop();
+      });
+    } on PlatformException catch (e) {
+      print(e);
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<File?> _cropImage({required File imageFile}) async {
+    CroppedFile? croppedImage =
+        await ImageCropper().cropImage(sourcePath: imageFile.path);
+    if (croppedImage == null) return null;
+    return File(croppedImage.path);
+  }
+
+  void _showSelectPhotoOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(25.0),
+        ),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+          initialChildSize: 0.28,
+          maxChildSize: 0.4,
+          minChildSize: 0.28,
+          expand: false,
+          builder: (context, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: SelectPhotoOptionsScreen(
+                onTap: _pickImage,
+              ),
+            );
+          }),
     );
   }
 }

@@ -23,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: <Widget>[
             const Text(
-              '',
+              'InTalk',
               style: TextStyle(
                   fontSize: 50.0,
                   fontWeight: FontWeight.bold,

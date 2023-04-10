@@ -13,8 +13,12 @@ class NewMessageEventArgs extends EventArgs {
   final String message;
   final String sender;
   final String receiver;
+  List<int>? imageBytes;
   NewMessageEventArgs(
-      {required this.message, required this.sender, required this.receiver});
+      {required this.message,
+      required this.sender,
+      required this.receiver,
+      this.imageBytes});
 }
 
 class GetMacAddress {
@@ -54,6 +58,10 @@ class LocalNetworkChatClient {
   String? _networkIpWithoutLastDigits;
 
   bool connected = false;
+
+  List<int> _currentImageBytes = [];
+  String? _currentImageSender;
+
   LocalNetworkChatClient({required this.user});
 
   Future<void> init() async {
@@ -127,6 +135,25 @@ class LocalNetworkChatClient {
         "${MessagingProtocol.private}@${user.macAddress}@${receiver.port}@$message");
   }
 
+  void sendBroadcastImage(Uint8List base64Image) async {
+    List<Uint8List> bytes = splitImage(base64Image);
+    for (var i = 0; i < bytes.length; i++) {
+      if (i == 0) {
+        sendMessage(
+            "${MessagingProtocol.broadcastImage}@${user.macAddress}@${base64Encode(bytes[i])}");
+      } else if (i == bytes.length - 1) {
+        sendMessage(
+            '${MessagingProtocol.broadcastImageEnd}@${base64Encode(bytes[i])}');
+      } else {
+        sendMessage(
+            '${MessagingProtocol.broadcastImageContd}@${base64Encode(bytes[i])}');
+      }
+      await Future.delayed(const Duration(
+          milliseconds:
+              10)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+    }
+  }
+
   // Send a message to the server
   void sendMessage(String message) {
     socket?.write('$message||');
@@ -160,6 +187,10 @@ class LocalNetworkChatClient {
       handleBroadcastMessage(split);
     } else if (split[0] == MessagingProtocol.private) {
       handlePrivateMessage(split);
+    } else if (split[0] == MessagingProtocol.broadcastImage ||
+        split[0] == MessagingProtocol.broadcastImageContd ||
+        split[0] == MessagingProtocol.broadcastImageEnd) {
+      handleBroadcastImage(split);
     }
   }
 
@@ -214,6 +245,27 @@ class LocalNetworkChatClient {
         receiver: "Private Message"));
   }
 
+  void handleBroadcastImage(List<String> split) {
+    if (split[0] == MessagingProtocol.broadcastImage) {
+      _currentImageSender = split[1];
+      _currentImageBytes.clear();
+      _currentImageBytes.addAll(base64Decode(split[2]));
+    } else if (split[0] == MessagingProtocol.broadcastImageContd) {
+      _currentImageBytes.addAll(base64Decode(split[1]));
+    } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
+      _currentImageBytes.addAll(base64Decode(split[1]));
+      broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
+          message: '',
+          imageBytes: _currentImageBytes,
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere(
+                  (element) => element.macAddress == _currentImageSender)
+              .name,
+          receiver: "General Message" //sender
+          ));
+    }
+  }
+
   //util functions--------------------------------------------------------------
 
   Future<String> _getNetworkIPAdress() async {
@@ -225,5 +277,23 @@ class LocalNetworkChatClient {
       }
     }
     return '';
+  }
+
+  List<Uint8List> splitImage(Uint8List data) {
+    final List<Uint8List> chunks = [];
+    const int chunkSize = 256; //bunu arttırarak deney yap.
+    int offset = 0;
+    int remaining = data.length;
+
+    while (remaining > 0) {
+      final int currentChunkSize =
+          (remaining < chunkSize) ? remaining : chunkSize;
+      final Uint8List chunk = data.sublist(offset, offset + currentChunkSize);
+      chunks.add(chunk);
+      remaining -= currentChunkSize;
+      offset += currentChunkSize;
+    }
+
+    return chunks;
   }
 }

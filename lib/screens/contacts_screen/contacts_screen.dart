@@ -1,10 +1,16 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:local_chat/backend/client.dart';
 import 'package:local_chat/backend/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
 import 'package:local_chat/screens/home_screen.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../utils/utility_functions.dart';
 import 'custom_widgets/contact.dart';
 
 class ContactsScreen extends StatefulWidget {
@@ -23,13 +29,14 @@ class _ContactsScreenState extends State<ContactsScreen>
   late TabController _tabController;
   LocalNetworkChat? server;
   LocalNetworkChatClient? client;
-
+  String? _localPath;
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     handleServerClientConnections();
     subscribeToEvents();
+    Utility.getLocalPath().then((value) => _localPath = value);
   }
 
   @override
@@ -210,34 +217,36 @@ class _ContactsScreenState extends State<ContactsScreen>
       connectToNewServer();
     });
 
-    LocalNetworkChatClient.broadcastMessageReceivedEvent.subscribe((args) {
+    LocalNetworkChatClient.broadcastMessageReceivedEvent
+        .subscribe((args) async {
+      args as NewMessageEventArgs;
+      File? file;
+      if (args.imageBytes != null) {
+        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
+        await file.create();
+        file.writeAsBytesSync(args.imageBytes!);
+      }
       if (ContactsScreen.messages[ContactsScreen.generalChatUser] == null) {
         ContactsScreen.messages[ContactsScreen.generalChatUser] = [];
       }
       ContactsScreen.messages[ContactsScreen.generalChatUser]!.insert(
-          0,
-          Message(
-              message: (args as NewMessageEventArgs).message,
-              sender: args.sender));
+          0, Message(message: args.message, sender: args.sender, image: file));
     });
 
-    LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) {
+    LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) async {
       args as NewMessageEventArgs;
-      User sender = getUserByName(args.sender);
+      File? file;
+      if (args.imageBytes != null) {
+        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
+        await file.create();
+        file.writeAsBytesSync(args.imageBytes!);
+      }
+      User sender = Utility.getUserByName(args.sender);
       if (ContactsScreen.messages[sender] == null) {
         ContactsScreen.messages[sender] = [];
       }
-      if (kDebugMode) {
-        print("Message received from ${args.sender}: ${args.message}");
-      }
-      ContactsScreen.messages[sender]!
-          .insert(0, Message(message: args.message, sender: args.sender));
-    });
-  }
-
-  User getUserByName(String name) {
-    return ContactsScreen.loggedInUsers.firstWhere((element) {
-      return element.name == name;
+      ContactsScreen.messages[sender]!.insert(
+          0, Message(message: args.message, sender: args.sender, image: file));
     });
   }
 }

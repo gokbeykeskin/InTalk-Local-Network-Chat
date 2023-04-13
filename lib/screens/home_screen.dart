@@ -11,6 +11,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _textFieldController = TextEditingController();
+  bool _validate = true;
+
+  @override
+  void dispose() {
+    _textFieldController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: <Widget>[
             const Text(
-              '',
+              'InTalk',
               style: TextStyle(
                   fontSize: 50.0,
                   fontWeight: FontWeight.bold,
@@ -36,10 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 50,
               child: ElevatedButton(
                   onPressed: () {
-                    showDialog(
-                        context: context,
-                        builder: (_) =>
-                            nameInput(_textFieldController, context));
+                    showDialog(context: context, builder: (_) => nameInput());
                   },
                   child: const Text('Connect with LAN')),
             ),
@@ -50,10 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 50,
               child: ElevatedButton(
                   onPressed: () {
-                    showDialog(
-                        context: context,
-                        builder: (_) =>
-                            nameInput(_textFieldController, context));
+                    showDialog(context: context, builder: (_) => nameInput());
                   },
                   child: const Text('Connect with Bluetooth')),
             ),
@@ -62,44 +63,50 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
 
-AlertDialog nameInput(
-    TextEditingController textFieldController, BuildContext context) {
-  return AlertDialog(
-    title: const Text('Continue as guest'),
-    content: TextField(
-      controller: textFieldController,
-      decoration: InputDecoration(
-        hintText: 'Name',
-        errorText: textFieldController.text.length < 3
-            ? 'Name should be at least 3 characters'
-            : null,
-        border: const OutlineInputBorder(),
+  AlertDialog nameInput() {
+    return AlertDialog(
+      title: const Text('Enter your name'),
+      content: TextField(
+        autofocus: true,
+        autocorrect: false,
+        controller: _textFieldController,
+        decoration: InputDecoration(
+          hintText: 'Name',
+          errorText: _validate == false
+              ? 'Name should be at least 3 characters'
+              : null,
+          border: const OutlineInputBorder(),
+        ),
+        keyboardType: TextInputType.name,
+        textInputAction: TextInputAction.next,
       ),
-      keyboardType: TextInputType.name,
-      textInputAction: TextInputAction.next,
-    ),
-    actions: <Widget>[
-      TextButton(
-        onPressed: () {
-          if (textFieldController.text.length > 2) {
-            Navigator.pop(context);
-            Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (context) =>
-                        ContactsScreen(name: textFieldController.text)));
-          }
-        },
-        child: const Text('Continue'),
-      ),
-      TextButton(
-        onPressed: () {
-          Navigator.of(context).pop();
-        },
-        child: const Text('Cancel'),
-      ),
-    ],
-  );
+      actions: <Widget>[
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _textFieldController.text.length > 2
+                  ? _validate = true
+                  : _validate = false;
+            });
+            if (_validate) {
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          ContactsScreen(name: _textFieldController.text)));
+            }
+          },
+          child: const Text('Continue'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
 }

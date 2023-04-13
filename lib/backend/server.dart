@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../utils/messaging_protocol.dart';
+import '../utils/utility_functions.dart';
 import 'client.dart';
 
 class LocalNetworkChat {
@@ -17,9 +18,12 @@ class LocalNetworkChat {
   User myUser;
   // Start the server socket and listen for incoming client connections
   LocalNetworkChat({required this.myUser});
+
+  int? _currentImageReceiverPort;
+
   Future<void> start() async {
     // Get the IP address of the local device
-    var ipAddress = await _getNetworkIPAdress();
+    var ipAddress = await Utility.getNetworkIPAdress();
 
     // Print the IP address to the console
     if (kDebugMode) {
@@ -36,9 +40,9 @@ class LocalNetworkChat {
       socket.listen((data) {
         // Convert the incoming data to a string
         var message = utf8.decode(data).trim();
-        if (kDebugMode) {
-          print('Message from Client:$message');
-        }
+        // if (kDebugMode) {
+        //   print('Message from Client:$message');
+        // }
         parseMessages(message, socket);
       }, onDone: () {
         //when a client closes a socket
@@ -136,6 +140,14 @@ class LocalNetworkChat {
           print("PRIVATE MESSAGE RECEIVED FROM ${split[1]}");
         }
         processPrivateMessage(message, socket);
+      } else if (split[0] == MessagingProtocol.broadcastImage ||
+          split[0] == MessagingProtocol.broadcastImageContd ||
+          split[0] == MessagingProtocol.broadcastImageEnd) {
+        processBroadcastImage(message, socket);
+      } else if (split[0] == MessagingProtocol.privateImage ||
+          split[0] == MessagingProtocol.privateImageContd ||
+          split[0] == MessagingProtocol.privateImageEnd) {
+        processPrivateImage(message, socket);
       }
     }
   }
@@ -160,18 +172,18 @@ class LocalNetworkChat {
 
   void processPrivateMessage(String message, Socket socket) {
     var split = message.split("@");
-
     sendMessageToPort(message, int.parse(split[2]));
   }
 
-  Future<String> _getNetworkIPAdress() async {
-    List<NetworkInterface> interfaces = await NetworkInterface.list();
-    for (NetworkInterface interface in interfaces) {
-      if (interface.name.startsWith('wlan') ||
-          interface.name.startsWith('en')) {
-        return interface.addresses.first.address;
-      }
+  void processBroadcastImage(String message, Socket socket) {
+    sendMessageToAllExcept(message, socket);
+  }
+
+  void processPrivateImage(String message, Socket socket) {
+    var split = message.split("@");
+    if (split[0] == MessagingProtocol.privateImage) {
+      _currentImageReceiverPort = int.parse(split[2]);
     }
-    return '';
+    sendMessageToPort(message, _currentImageReceiverPort!);
   }
 }

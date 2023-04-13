@@ -1,14 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 class MessageBox extends StatelessWidget {
   final String sender;
   final String message;
   final Alignment alignment;
+  final File? image;
   const MessageBox(
       {super.key,
       required this.sender,
       required this.message,
-      required this.alignment});
+      required this.alignment,
+      this.image});
 
   @override
   Widget build(BuildContext context) {
@@ -34,9 +38,18 @@ class MessageBox extends StatelessWidget {
                       ),
                     ),
                     Text(message),
+                    getImage(),
                   ],
                 ),
               ))),
     );
+  }
+
+  getImage() {
+    if (image == null) {
+      return const SizedBox(width: 0, height: 0);
+    } else {
+      return Image.file(image!);
+    }
   }
 }

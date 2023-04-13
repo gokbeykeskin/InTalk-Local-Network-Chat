@@ -11,4 +11,6 @@ class MessagingProtocol {
   static const broadcastImageContd = 'cb';
   static const broadcastImageEnd = 'eb';
   static const privateImage = 'pi';
+  static const privateImageContd = 'ci';
+  static const privateImageEnd = 'ei';
 }

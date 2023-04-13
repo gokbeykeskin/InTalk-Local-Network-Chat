@@ -10,6 +10,7 @@ import 'package:local_chat/screens/chat_screen/chat_screen.dart';
 import 'package:local_chat/screens/home_screen.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../utils/utility_functions.dart';
 import 'custom_widgets/contact.dart';
 
 class ContactsScreen extends StatefulWidget {
@@ -28,13 +29,14 @@ class _ContactsScreenState extends State<ContactsScreen>
   late TabController _tabController;
   LocalNetworkChat? server;
   LocalNetworkChatClient? client;
-
+  String? _localPath;
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     handleServerClientConnections();
     subscribeToEvents();
+    Utility.getLocalPath().then((value) => _localPath = value);
   }
 
   @override
@@ -220,9 +222,9 @@ class _ContactsScreenState extends State<ContactsScreen>
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('${(await _localPath)}/${generateRandomString(5)}.png');
+        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
         await file.create();
-        await file.writeAsBytes(args.imageBytes!);
+        file.writeAsBytesSync(args.imageBytes!);
       }
       if (ContactsScreen.messages[ContactsScreen.generalChatUser] == null) {
         ContactsScreen.messages[ContactsScreen.generalChatUser] = [];
@@ -231,35 +233,20 @@ class _ContactsScreenState extends State<ContactsScreen>
           0, Message(message: args.message, sender: args.sender, image: file));
     });
 
-    LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) {
+    LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) async {
       args as NewMessageEventArgs;
-      User sender = getUserByName(args.sender);
+      File? file;
+      if (args.imageBytes != null) {
+        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
+        await file.create();
+        file.writeAsBytesSync(args.imageBytes!);
+      }
+      User sender = Utility.getUserByName(args.sender);
       if (ContactsScreen.messages[sender] == null) {
         ContactsScreen.messages[sender] = [];
       }
-      if (kDebugMode) {
-        print("Message received from ${args.sender}: ${args.message}");
-      }
-      ContactsScreen.messages[sender]!
-          .insert(0, Message(message: args.message, sender: args.sender));
+      ContactsScreen.messages[sender]!.insert(
+          0, Message(message: args.message, sender: args.sender, image: file));
     });
-  }
-
-  User getUserByName(String name) {
-    return ContactsScreen.loggedInUsers.firstWhere((element) {
-      return element.name == name;
-    });
-  }
-
-  Future<String> get _localPath async {
-    final directory = await getTemporaryDirectory();
-
-    return directory.path;
-  }
-
-  String generateRandomString(int len) {
-    var random = Random.secure();
-    var values = List<int>.generate(len, (i) => random.nextInt(255));
-    return base64Encode(values);
   }
 }

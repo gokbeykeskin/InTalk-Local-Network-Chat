@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 
 import '../utils/messaging_protocol.dart';
 import '../screens/contacts_screen/contacts_screen.dart';
+import '../utils/utility_functions.dart';
 
 class NewMessageEventArgs extends EventArgs {
   final String message;
@@ -59,13 +60,12 @@ class LocalNetworkChatClient {
 
   bool connected = false;
 
-  List<int> _currentImageBytes = [];
-  String? _currentImageSender;
-
+  final List<int> _currentImageBytes = [];
+  String? _currentImageSenderMac;
   LocalNetworkChatClient({required this.user});
 
   Future<void> init() async {
-    _networkIpAdress = await _getNetworkIPAdress();
+    _networkIpAdress = await Utility.getNetworkIPAdress();
 
     List<String> components = _networkIpAdress!.split('.');
 
@@ -135,8 +135,8 @@ class LocalNetworkChatClient {
         "${MessagingProtocol.private}@${user.macAddress}@${receiver.port}@$message");
   }
 
-  void sendBroadcastImage(Uint8List base64Image) async {
-    List<Uint8List> bytes = splitImage(base64Image);
+  Future<void> sendBroadcastImage(Uint8List base64Image) async {
+    List<Uint8List> bytes = Utility.splitImage(base64Image);
     for (var i = 0; i < bytes.length; i++) {
       if (i == 0) {
         sendMessage(
@@ -150,7 +150,26 @@ class LocalNetworkChatClient {
       }
       await Future.delayed(const Duration(
           milliseconds:
-              10)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+              8)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+    }
+  }
+
+  Future<void> sendPrivateImage(Uint8List base64Image, User receiver) async {
+    List<Uint8List> bytes = Utility.splitImage(base64Image);
+    for (var i = 0; i < bytes.length; i++) {
+      if (i == 0) {
+        sendMessage(
+            "${MessagingProtocol.privateImage}@${user.macAddress}@${receiver.port}@${base64Encode(bytes[i])}");
+      } else if (i == bytes.length - 1) {
+        sendMessage(
+            '${MessagingProtocol.privateImageEnd}@${base64Encode(bytes[i])}');
+      } else {
+        sendMessage(
+            '${MessagingProtocol.privateImageContd}@${base64Encode(bytes[i])}');
+      }
+      await Future.delayed(const Duration(
+          milliseconds:
+              8)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
     }
   }
 
@@ -171,9 +190,9 @@ class LocalNetworkChatClient {
   }
 
   void handleMessage(String message) {
-    if (kDebugMode) {
-      print("Message from server: $message");
-    }
+    // if (kDebugMode) {
+    //   print("Message from server: $message");
+    // }
     var split = message.split("@");
     if (split[0] == MessagingProtocol.heartbeat) {
       handleHeartbeat(split);
@@ -191,12 +210,15 @@ class LocalNetworkChatClient {
         split[0] == MessagingProtocol.broadcastImageContd ||
         split[0] == MessagingProtocol.broadcastImageEnd) {
       handleBroadcastImage(split);
+    } else if (split[0] == MessagingProtocol.privateImage ||
+        split[0] == MessagingProtocol.privateImageContd ||
+        split[0] == MessagingProtocol.privateImageEnd) {
+      handlePrivateImage(split);
     }
   }
 
   void handleHeartbeat(List<String> split) {
     if (split[1] != user.macAddress) {
-      //kendini listelemek istiyosan bunu aç.
       if (kDebugMode) {
         print("New user added: ${split[2]}");
       }
@@ -247,7 +269,7 @@ class LocalNetworkChatClient {
 
   void handleBroadcastImage(List<String> split) {
     if (split[0] == MessagingProtocol.broadcastImage) {
-      _currentImageSender = split[1];
+      _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
       _currentImageBytes.addAll(base64Decode(split[2]));
     } else if (split[0] == MessagingProtocol.broadcastImageContd) {
@@ -259,41 +281,30 @@ class LocalNetworkChatClient {
           imageBytes: _currentImageBytes,
           sender: ContactsScreen.loggedInUsers
               .firstWhere(
-                  (element) => element.macAddress == _currentImageSender)
+                  (element) => element.macAddress == _currentImageSenderMac)
               .name,
           receiver: "General Message" //sender
           ));
     }
   }
 
-  //util functions--------------------------------------------------------------
-
-  Future<String> _getNetworkIPAdress() async {
-    List<NetworkInterface> interfaces = await NetworkInterface.list();
-    for (NetworkInterface interface in interfaces) {
-      if (interface.name.startsWith('wlan') ||
-          interface.name.startsWith('en')) {
-        return interface.addresses.first.address;
-      }
+  void handlePrivateImage(List<String> split) {
+    if (split[0] == MessagingProtocol.privateImage) {
+      _currentImageSenderMac = split[1];
+      _currentImageBytes.clear();
+      _currentImageBytes.addAll(base64Decode(split[3]));
+    } else if (split[0] == MessagingProtocol.privateImageContd) {
+      _currentImageBytes.addAll(base64Decode(split[1]));
+    } else if (split[0] == MessagingProtocol.privateImageEnd) {
+      _currentImageBytes.addAll(base64Decode(split[1]));
+      privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
+          message: '',
+          imageBytes: _currentImageBytes,
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere(
+                  (element) => element.macAddress == _currentImageSenderMac)
+              .name,
+          receiver: 'Private Message'));
     }
-    return '';
-  }
-
-  List<Uint8List> splitImage(Uint8List data) {
-    final List<Uint8List> chunks = [];
-    const int chunkSize = 256; //bunu arttırarak deney yap.
-    int offset = 0;
-    int remaining = data.length;
-
-    while (remaining > 0) {
-      final int currentChunkSize =
-          (remaining < chunkSize) ? remaining : chunkSize;
-      final Uint8List chunk = data.sublist(offset, offset + currentChunkSize);
-      chunks.add(chunk);
-      remaining -= currentChunkSize;
-      offset += currentChunkSize;
-    }
-
-    return chunks;
   }
 }

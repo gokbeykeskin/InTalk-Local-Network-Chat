@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -9,6 +10,7 @@ import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../../backend/client.dart';
+import '../../utils/utility_functions.dart';
 import '../select_photo_options_screen.dart';
 
 class Message {
@@ -34,6 +36,38 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   List<Message> messages = [];
+  final textFieldController = TextEditingController();
+  var snackBar = SnackBar(
+    behavior: SnackBarBehavior.fixed,
+    duration: const Duration(minutes: 30),
+    content: SizedBox(
+      height: 16,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Text(
+            'Sending Image',
+            overflow: TextOverflow.visible,
+          ),
+          SizedBox(width: 50),
+          SizedBox(
+            height: 16,
+            width: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  @override
+  void dispose() {
+    super.dispose();
+    textFieldController.dispose();
+  }
 
   @override
   void initState() {
@@ -116,36 +150,41 @@ class _ChatScreenState extends State<ChatScreen> {
 
 //consists of message typing and send image button
   _createBottomChatArea() {
-    final textFieldController = TextEditingController();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 35),
       child: Row(children: [
         Expanded(
-            child: TextField(
-          controller: textFieldController,
-          decoration: InputDecoration(
-            hintText: 'Type a message',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          keyboardType: TextInputType.name,
-          onSubmitted: (value) {
-            if (mounted) {
-              setState(() {
-                messages.insert(0,
-                    Message(sender: widget.meClient.user.name, message: value));
-              });
-            }
+          child: TextField(
+            controller: textFieldController,
+            autofocus: true,
+            autocorrect: false,
+            decoration: InputDecoration(
+              hintText: 'Type a message',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            keyboardType: TextInputType.name,
+            onSubmitted: (value) {
+              if (mounted) {
+                setState(() {
+                  messages.insert(
+                      0,
+                      Message(
+                          sender: widget.meClient.user.name, message: value));
+                });
+              }
 
-            if (widget.isGeneralChat) {
-              widget.meClient.sendBroadcastMessage(value);
-            } else {
-              widget.meClient.sendPrivateMessage(value, widget.receiver);
-            }
-            if (value.isNotEmpty) {
-              textFieldController.clear();
-            }
-          },
-        )),
+              if (widget.isGeneralChat) {
+                widget.meClient.sendBroadcastMessage(value);
+              } else {
+                widget.meClient.sendPrivateMessage(value, widget.receiver);
+              }
+              if (value.isNotEmpty) {
+                textFieldController.clear();
+              }
+            },
+          ),
+        ),
         SizedBox(
           width: 50,
           height: 50,
@@ -166,27 +205,32 @@ class _ChatScreenState extends State<ChatScreen> {
       final image = await ImagePicker().pickImage(source: source);
       if (image == null) return;
       File? img = File(image.path);
-      img = await _cropImage(imageFile: img);
-
-      widget.meClient.sendBroadcastImage(img!.readAsBytesSync());
+      img = await Utility.cropImage(imageFile: img);
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(snackBar);
+      }
+      if (widget.isGeneralChat) {
+        await widget.meClient.sendBroadcastImage(img!.readAsBytesSync());
+      } else {
+        await widget.meClient
+            .sendPrivateImage(img!.readAsBytesSync(), widget.receiver);
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
       setState(() {
         messages.insert(
             0,
             Message(
                 sender: widget.meClient.user.name, message: "", image: img));
-        Navigator.of(context).pop();
       });
     } on PlatformException catch (e) {
-      print(e);
+      if (kDebugMode) {
+        print(e);
+      }
       Navigator.of(context).pop();
     }
-  }
-
-  Future<File?> _cropImage({required File imageFile}) async {
-    CroppedFile? croppedImage =
-        await ImageCropper().cropImage(sourcePath: imageFile.path);
-    if (croppedImage == null) return null;
-    return File(croppedImage.path);
   }
 
   void _showSelectPhotoOptions(BuildContext context) {

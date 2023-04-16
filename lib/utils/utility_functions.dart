@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -23,7 +24,7 @@ class Utility {
 
   static List<Uint8List> splitImage(Uint8List data) {
     final List<Uint8List> chunks = [];
-    const int chunkSize = 256; //bunu arttırarak deney yap.
+    const int chunkSize = 512; //bunu arttırarak deney yap.
     int offset = 0;
     int remaining = data.length;
 
@@ -44,6 +45,44 @@ class Utility {
         await ImageCropper().cropImage(sourcePath: imageFile.path);
     if (croppedImage == null) return null;
     return File(croppedImage.path);
+  }
+
+  static int mapImageSizeToQuality(int value,
+      {int maxInputValue = 150000,
+      int minOutputValue = 10,
+      int maxOutputValue = 100}) {
+    if (value > maxInputValue) {
+      return minOutputValue;
+    }
+    int percentage = ((maxInputValue - value) /
+                (maxInputValue / (maxOutputValue - minOutputValue)))
+            .round() +
+        minOutputValue;
+    if (kDebugMode) {
+      print(
+          "Quality:${percentage <= maxOutputValue ? percentage : maxOutputValue}");
+    }
+    return percentage <= maxOutputValue ? percentage : maxOutputValue;
+  }
+
+  static Future<File> compressImage(File file, String targetPath) async {
+    int quality = mapImageSizeToQuality(file.lengthSync());
+    if (quality > 80) {
+      //if the calculated quality is more than 80, image does not need to be compressed.
+      //since it is a small image and compression usually makes it bigger.
+      return file;
+    }
+    var result = await FlutterImageCompress.compressAndGetFile(
+      file.absolute.path,
+      targetPath,
+      quality: quality,
+    );
+
+    if (kDebugMode) {
+      print("Before compression:${file.lengthSync()}");
+      print("After compression:${result!.lengthSync()}");
+    }
+    return result!;
   }
 
   static User getUserByName(String name) {

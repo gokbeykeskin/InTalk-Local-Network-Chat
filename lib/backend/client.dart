@@ -64,6 +64,13 @@ class LocalNetworkChatClient {
   String? _currentImageSenderMac;
   LocalNetworkChatClient({required this.user});
 
+  // A stream controller for sending messages to the server
+  StreamController<String> messageStreamController =
+      StreamController.broadcast();
+
+  // A stream for receiving messages from the server
+  Stream<String> get messageStream => messageStreamController.stream;
+
   Future<void> init() async {
     _networkIpAdress = await Utility.getNetworkIPAdress();
 
@@ -83,6 +90,10 @@ class LocalNetworkChatClient {
         user.macAddress = "11223344"; //for macos debugging
       }
     }
+
+    messageStream.listen((message) {
+      parseMessages(message);
+    });
   }
 
   // Connect to the server
@@ -110,7 +121,7 @@ class LocalNetworkChatClient {
     socket?.listen((data) {
       // Convert the incoming data to a string
       var message = utf8.decode(data).trim();
-      parseMessages(message);
+      messageStreamController.add(message);
     });
     sendMessage(
         "${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${socket?.port}");
@@ -150,7 +161,7 @@ class LocalNetworkChatClient {
       }
       await Future.delayed(const Duration(
           milliseconds:
-              8)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+              60)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
     }
   }
 
@@ -169,7 +180,7 @@ class LocalNetworkChatClient {
       }
       await Future.delayed(const Duration(
           milliseconds:
-              8)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+              60)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
     }
   }
 
@@ -178,6 +189,9 @@ class LocalNetworkChatClient {
     socket?.write('$message||');
   }
 
+  // Messages are received in the following format
+  // message1_identifier@message1_data||message2_identifier@message2_data||message3_identifier@message3_data
+  // This function parses the messages and calls handler
   void parseMessages(String message) {
     if (message.contains("||")) {
       var split = message.split('||');
@@ -189,6 +203,7 @@ class LocalNetworkChatClient {
     }
   }
 
+  //Splits the message and calls the appropriate handler
   void handleMessage(String message) {
     // if (kDebugMode) {
     //   print("Message from server: $message");
@@ -228,7 +243,7 @@ class LocalNetworkChatClient {
     }
   }
 
-//handle when some other client logged out
+//handle when some other client logs out
   void handleLogout(List<String> split) {
     if (kDebugMode) {
       print("User logged out: ${split[1]}");
@@ -246,7 +261,7 @@ class LocalNetworkChatClient {
     connectToNewServerEvent.broadcast();
   }
 
-  void handleBroadcastMessage(List<String> split) {
+  void handleBroadcastMessage(List<String> split) async {
     if (split[1] != user.macAddress) {
       broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
           message: split[2], //message
@@ -258,7 +273,7 @@ class LocalNetworkChatClient {
     }
   }
 
-  void handlePrivateMessage(List<String> split) {
+  void handlePrivateMessage(List<String> split) async {
     privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
         message: split[3], //message
         sender: ContactsScreen.loggedInUsers
@@ -267,7 +282,7 @@ class LocalNetworkChatClient {
         receiver: "Private Message"));
   }
 
-  void handleBroadcastImage(List<String> split) {
+  void handleBroadcastImage(List<String> split) async {
     if (split[0] == MessagingProtocol.broadcastImage) {
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
@@ -276,6 +291,7 @@ class LocalNetworkChatClient {
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
       _currentImageBytes.addAll(base64Decode(split[1]));
+      await Future.delayed(const Duration(milliseconds: 20));
       broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
           message: '',
           imageBytes: _currentImageBytes,
@@ -288,7 +304,7 @@ class LocalNetworkChatClient {
     }
   }
 
-  void handlePrivateImage(List<String> split) {
+  void handlePrivateImage(List<String> split) async {
     if (split[0] == MessagingProtocol.privateImage) {
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
@@ -297,6 +313,7 @@ class LocalNetworkChatClient {
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
       _currentImageBytes.addAll(base64Decode(split[1]));
+      await Future.delayed(const Duration(milliseconds: 20));
       privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
           message: '',
           imageBytes: _currentImageBytes,

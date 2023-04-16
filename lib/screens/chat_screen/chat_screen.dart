@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
@@ -62,7 +61,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     ),
   );
-
   @override
   void dispose() {
     super.dispose();
@@ -191,9 +189,12 @@ class _ChatScreenState extends State<ChatScreen> {
           child: IconButton(
               padding: const EdgeInsets.all(0.0),
               onPressed: () {
-                _showSelectPhotoOptions(context);
+                ContactsScreen.ongoingImageSend
+                    ? null
+                    : _showSelectPhotoOptions(context);
               },
-              color: Colors.blue,
+              color:
+                  ContactsScreen.ongoingImageSend ? Colors.grey : Colors.blue,
               icon: const Icon(Icons.image, size: 50)),
         ),
       ]),
@@ -206,18 +207,28 @@ class _ChatScreenState extends State<ChatScreen> {
       if (image == null) return;
       File? img = File(image.path);
       img = await Utility.cropImage(imageFile: img);
+      if (img == null) return;
       if (context.mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(snackBar);
+        setState(() {
+          ContactsScreen.ongoingImageSend = true;
+        });
+      }
+      if (Platform.isAndroid) {
+        img = await Utility.compressImage(img, '${img.path}compressed.jpeg');
       }
       if (widget.isGeneralChat) {
-        await widget.meClient.sendBroadcastImage(img!.readAsBytesSync());
+        await widget.meClient.sendBroadcastImage(img.readAsBytesSync());
       } else {
         await widget.meClient
-            .sendPrivateImage(img!.readAsBytesSync(), widget.receiver);
+            .sendPrivateImage(img.readAsBytesSync(), widget.receiver);
       }
-      if (context.mounted) {
+      if (mounted && context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        setState(() {
+          ContactsScreen.ongoingImageSend = false;
+        });
       }
       setState(() {
         messages.insert(

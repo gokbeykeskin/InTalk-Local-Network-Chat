@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +6,6 @@ import 'package:local_chat/backend/client.dart';
 import 'package:local_chat/backend/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
 import 'package:local_chat/screens/home_screen.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../utils/utility_functions.dart';
 import 'custom_widgets/contact.dart';
@@ -20,6 +17,8 @@ class ContactsScreen extends StatefulWidget {
   static List<User> loggedInUsers = [];
   static Map<User, List<Message>> messages =
       {}; //holds all the messages for each receiver.
+  static bool ongoingImageSend = false;
+
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
 }
@@ -139,6 +138,26 @@ class _ContactsScreenState extends State<ContactsScreen>
       if (kDebugMode) {
         print("Can't create server.: $e");
       }
+      if (mounted) {
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()));
+        showDialog(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: const Text("Can't create server."),
+                content: const Text(
+                    "You are probably not connected to a local network. Connect one and try again."),
+                actions: [
+                  TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text("OK"))
+                ],
+              );
+            });
+      }
     }
   }
 
@@ -222,7 +241,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
+        file = File('$_localPath/${Utility.generateRandomString(5)}.jpeg');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }
@@ -237,7 +256,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${Utility.generateRandomString(5)}.png');
+        file = File('$_localPath/${Utility.generateRandomString(5)}.jpeg');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }

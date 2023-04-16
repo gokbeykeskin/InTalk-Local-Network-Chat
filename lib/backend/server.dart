@@ -9,6 +9,14 @@ import '../utils/messaging_protocol.dart';
 import '../utils/utility_functions.dart';
 import 'client.dart';
 
+class CustomStreamController {
+  StreamController<String> messageStreamController =
+      StreamController.broadcast();
+  Stream<String> get messageStream => messageStreamController.stream;
+  Socket socket;
+  CustomStreamController({required this.socket});
+}
+
 class LocalNetworkChat {
   // Create a server socket that listens for incoming client connections
   ServerSocket? serverSocket;
@@ -20,6 +28,9 @@ class LocalNetworkChat {
   LocalNetworkChat({required this.myUser});
 
   int? _currentImageReceiverPort;
+
+  // A stream controller list for sending messages to all connected clients
+  List<CustomStreamController> messageStreamControllers = [];
 
   Future<void> start() async {
     // Get the IP address of the local device
@@ -35,6 +46,11 @@ class LocalNetworkChat {
     // Listen for incoming client connections
     serverSocket?.listen((socket) {
       // Add the socket to the list of connected sockets
+      messageStreamControllers.add(CustomStreamController(socket: socket));
+
+      messageStreamControllers.last.messageStream.listen((message) {
+        parseMessages(message, socket);
+      });
       connectedSockets.add(socket);
       // Listen for incoming messages from the client
       socket.listen((data) {
@@ -43,7 +59,10 @@ class LocalNetworkChat {
         // if (kDebugMode) {
         //   print('Message from Client:$message');
         // }
-        parseMessages(message, socket);
+        messageStreamControllers
+            .firstWhere((element) => element.socket == socket)
+            .messageStreamController
+            .add(message);
       }, onDone: () {
         //when a client closes a socket
         // Remove the socket from the list of connected sockets
@@ -162,6 +181,7 @@ class LocalNetworkChat {
           socket);
     }
     sendMessage(
+        //send this client to the new client since it is not in the list of logged in clients
         '${MessagingProtocol.heartbeat}@${myUser.macAddress}@${myUser.name}@${myUser.port}',
         socket);
   }

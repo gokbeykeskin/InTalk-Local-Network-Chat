@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../fullscreen_image.dart';
+
 class MessageBox extends StatelessWidget {
   final String sender;
   final String message;
@@ -38,18 +40,25 @@ class MessageBox extends StatelessWidget {
                       ),
                     ),
                     Text(message),
-                    getImage(),
+                    getImage(context),
                   ],
                 ),
               ))),
     );
   }
 
-  getImage() {
+  getImage(BuildContext context) {
     if (image == null) {
       return const SizedBox(width: 0, height: 0);
     } else {
-      return Image.file(image!);
+      return InkWell(
+          onTap: () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => FullScreenImage(image!)));
+          },
+          child: Image.file(image!));
     }
   }
 }

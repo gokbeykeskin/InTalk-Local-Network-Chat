@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 
-import '../utils/messaging_protocol.dart';
+import '../auth/user.dart';
+import 'messaging_protocol.dart';
 import '../screens/contacts_screen/contacts_screen.dart';
 import '../utils/utility_functions.dart';
 
@@ -22,28 +22,9 @@ class NewMessageEventArgs extends EventArgs {
       this.imageBytes});
 }
 
-class GetMacAddress {
-  static Future<String?> getId() async {
-    var deviceInfo = DeviceInfoPlugin();
-    if (Platform.isIOS) {
-      // import 'dart:io'
-      var iosDeviceInfo = await deviceInfo.iosInfo;
-      return iosDeviceInfo.identifierForVendor; // unique ID on iOS
-    } else if (Platform.isAndroid) {
-      var androidDeviceInfo = await deviceInfo.androidInfo;
-      return androidDeviceInfo.androidId; // unique ID on Android
-    }
-    return null;
-  }
-}
-
-class User {
-  String? macAddress;
-  String name;
-  // The socket used to communicate with the server
-  int? port;
-
-  User({required this.name, this.port, this.macAddress});
+class AcceptanceEventArgs extends EventArgs {
+  bool accepted;
+  AcceptanceEventArgs({required this.accepted});
 }
 
 class LocalNetworkChatClient {
@@ -54,7 +35,7 @@ class LocalNetworkChatClient {
   static var usersUpdatedEvent = Event();
   static var becomeServerEvent = Event();
   static var connectToNewServerEvent = Event();
-
+  static var acceptanceEvent = Event();
   String? _networkIpAdress;
   String? _networkIpWithoutLastDigits;
 
@@ -62,6 +43,7 @@ class LocalNetworkChatClient {
 
   final List<int> _currentImageBytes = [];
   String? _currentImageSenderMac;
+
   LocalNetworkChatClient({required this.user});
 
   // A stream controller for sending messages to the server
@@ -83,7 +65,7 @@ class LocalNetworkChatClient {
     _networkIpWithoutLastDigits = '${components.join('.')}.';
 
     try {
-      user.macAddress = (await GetMacAddress.getId())!;
+      user.macAddress = (await Utility.getDeviceId())!;
     } catch (e) {
       if (kDebugMode) {
         print("MAC ADDRESS GET FAILED:$e");
@@ -134,6 +116,8 @@ class LocalNetworkChatClient {
     connectToNewServerEvent.unsubscribeAll();
     broadcastMessageReceivedEvent.unsubscribeAll();
     privateMessageReceivedEvent.unsubscribeAll();
+    acceptanceEvent.unsubscribeAll();
+
     await socket?.close();
   }
 
@@ -148,40 +132,39 @@ class LocalNetworkChatClient {
 
   Future<void> sendBroadcastImage(Uint8List base64Image) async {
     List<Uint8List> bytes = Utility.splitImage(base64Image);
+    List<int> hashedBytes = Utility.hashImage(base64Image);
+    sendMessage("${MessagingProtocol.broadcastImage}@${user.macAddress}");
     for (var i = 0; i < bytes.length; i++) {
-      if (i == 0) {
-        sendMessage(
-            "${MessagingProtocol.broadcastImage}@${user.macAddress}@${base64Encode(bytes[i])}");
-      } else if (i == bytes.length - 1) {
-        sendMessage(
-            '${MessagingProtocol.broadcastImageEnd}@${base64Encode(bytes[i])}');
-      } else {
-        sendMessage(
-            '${MessagingProtocol.broadcastImageContd}@${base64Encode(bytes[i])}');
-      }
-      await Future.delayed(const Duration(
-          milliseconds:
-              60)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+      await Future.delayed(
+        const Duration(milliseconds: 50),
+      ); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+      sendMessage(
+          '${MessagingProtocol.broadcastImageContd}@${base64Encode(bytes[i])}');
     }
+    sendMessage(
+        '${MessagingProtocol.broadcastImageEnd}@${base64Encode(hashedBytes)}');
   }
 
   Future<void> sendPrivateImage(Uint8List base64Image, User receiver) async {
     List<Uint8List> bytes = Utility.splitImage(base64Image);
+    List<int> hashedBytes = Utility.hashImage(base64Image);
+    sendMessage(
+        "${MessagingProtocol.privateImage}@${user.macAddress}@${receiver.port}");
     for (var i = 0; i < bytes.length; i++) {
-      if (i == 0) {
-        sendMessage(
-            "${MessagingProtocol.privateImage}@${user.macAddress}@${receiver.port}@${base64Encode(bytes[i])}");
-      } else if (i == bytes.length - 1) {
-        sendMessage(
-            '${MessagingProtocol.privateImageEnd}@${base64Encode(bytes[i])}');
-      } else {
-        sendMessage(
-            '${MessagingProtocol.privateImageContd}@${base64Encode(bytes[i])}');
-      }
-      await Future.delayed(const Duration(
-          milliseconds:
-              60)); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
+      await Future.delayed(
+        const Duration(milliseconds: 50),
+      );
+      sendMessage(
+          '${MessagingProtocol.privateImageContd}@${base64Encode(bytes[i])}');
     }
+    sendMessage(
+        '${MessagingProtocol.privateImageEnd}@${base64Encode(hashedBytes)}');
+  }
+
+  void changeName(String newName) {
+    user.name = newName;
+    sendMessage(
+        "${MessagingProtocol.nameUpdate}@${user.macAddress}@${user.name}");
   }
 
   // Send a message to the server
@@ -210,16 +193,39 @@ class LocalNetworkChatClient {
     // }
     var split = message.split("@");
     if (split[0] == MessagingProtocol.heartbeat) {
+      if (kDebugMode) {
+        print("Client: Heartbeat received from ${split[2]}");
+      }
       handleHeartbeat(split);
+    } else if (split[0] == MessagingProtocol.trustedDevice) {
+      if (kDebugMode) {
+        print("Client: Trusted device ${split[1]} received.");
+      }
+      handleTrustedDevice(split[1]);
     } else if (split[0] == MessagingProtocol.logout) {
+      if (kDebugMode) {
+        print("Client: Logout received from ${split[1]}");
+      }
       handleLogout(split);
     } else if (split[0] == MessagingProtocol.becomeServer) {
+      if (kDebugMode) {
+        print("Client: Become server received from server");
+      }
       handleBecomeServer(split);
     } else if (split[0] == MessagingProtocol.connectToNewServer) {
+      if (kDebugMode) {
+        print("Client: Connect to new server received from server");
+      }
       handleConnectToNewServer(split);
     } else if (split[0] == MessagingProtocol.broadcast) {
+      if (kDebugMode) {
+        print("Client: Broadcast message received from ${split[1]}");
+      }
       handleBroadcastMessage(split);
     } else if (split[0] == MessagingProtocol.private) {
+      if (kDebugMode) {
+        print("Client: Private message received from ${split[1]}");
+      }
       handlePrivateMessage(split);
     } else if (split[0] == MessagingProtocol.broadcastImage ||
         split[0] == MessagingProtocol.broadcastImageContd ||
@@ -229,6 +235,16 @@ class LocalNetworkChatClient {
         split[0] == MessagingProtocol.privateImageContd ||
         split[0] == MessagingProtocol.privateImageEnd) {
       handlePrivateImage(split);
+    } else if (split[0] == MessagingProtocol.nameUpdate) {
+      if (kDebugMode) {
+        print("Client: Name update received from ${split[1]}");
+      }
+      handleNameUpdate(split);
+    } else if (split[0] == MessagingProtocol.rejected) {
+      if (kDebugMode) {
+        print("Client: Server Rejected the connection.");
+      }
+      acceptanceEvent.broadcast(AcceptanceEventArgs(accepted: false));
     }
   }
 
@@ -240,6 +256,17 @@ class LocalNetworkChatClient {
       ContactsScreen.loggedInUsers.add(User(
           macAddress: split[1], name: split[2], port: int.parse(split[3])));
       usersUpdatedEvent.broadcast();
+    }
+  }
+
+  void handleTrustedDevice(String macAddress) {
+    List<String>? trustedDevices = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('trustedDevices');
+    trustedDevices ??= [];
+    if (!trustedDevices.contains(macAddress)) {
+      trustedDevices.add(macAddress);
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('trustedDevices', trustedDevices);
     }
   }
 
@@ -263,65 +290,118 @@ class LocalNetworkChatClient {
 
   void handleBroadcastMessage(List<String> split) async {
     if (split[1] != user.macAddress) {
-      broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
-          message: split[2], //message
-          sender: ContactsScreen.loggedInUsers
-              .firstWhere((element) => element.macAddress == split[1])
-              .name,
-          receiver: "General Message" //sender
-          ));
+      broadcastMessageReceivedEvent.broadcast(
+        NewMessageEventArgs(
+            message: split[2], //message
+            sender: ContactsScreen.loggedInUsers
+                .firstWhere((element) => element.macAddress == split[1])
+                .name,
+            receiver: "General Message" //sender
+            ),
+      );
     }
   }
 
   void handlePrivateMessage(List<String> split) async {
-    privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
-        message: split[3], //message
-        sender: ContactsScreen.loggedInUsers
-            .firstWhere((element) => element.macAddress == split[1])
-            .name,
-        receiver: "Private Message"));
+    privateMessageReceivedEvent.broadcast(
+      NewMessageEventArgs(
+          message: split[3], //message
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere((element) => element.macAddress == split[1])
+              .name,
+          receiver: "Private Message"),
+    );
   }
 
   void handleBroadcastImage(List<String> split) async {
     if (split[0] == MessagingProtocol.broadcastImage) {
+      if (kDebugMode) {
+        print("Broadcast image received from ${split[1]}");
+      }
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
-      _currentImageBytes.addAll(base64Decode(split[2]));
     } else if (split[0] == MessagingProtocol.broadcastImageContd) {
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
-      _currentImageBytes.addAll(base64Decode(split[1]));
-      await Future.delayed(const Duration(milliseconds: 20));
-      broadcastMessageReceivedEvent.broadcast(NewMessageEventArgs(
-          message: '',
-          imageBytes: _currentImageBytes,
-          sender: ContactsScreen.loggedInUsers
-              .firstWhere(
-                  (element) => element.macAddress == _currentImageSenderMac)
-              .name,
-          receiver: "General Message" //sender
-          ));
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (listEquals(
+          Utility.hashImage(_currentImageBytes), base64Decode(split[1]))) {
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        broadcastMessageReceivedEvent.broadcast(
+          NewMessageEventArgs(
+            message: '',
+            imageBytes: _currentImageBytes,
+            sender: ContactsScreen.loggedInUsers
+                .firstWhere(
+                    (element) => element.macAddress == _currentImageSenderMac)
+                .name,
+            receiver: "General Message", //sender
+          ),
+        );
+      } else {
+        broadcastMessageReceivedEvent.broadcast(
+          NewMessageEventArgs(
+            message: 'Sent an image, but it was corrupted.',
+            sender: ContactsScreen.loggedInUsers
+                .firstWhere(
+                    (element) => element.macAddress == _currentImageSenderMac)
+                .name,
+            receiver: "General Message", //sender
+          ),
+        );
+      }
     }
   }
 
   void handlePrivateImage(List<String> split) async {
     if (split[0] == MessagingProtocol.privateImage) {
+      if (kDebugMode) {
+        print("Private image received from ${split[1]}");
+      }
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
-      _currentImageBytes.addAll(base64Decode(split[3]));
     } else if (split[0] == MessagingProtocol.privateImageContd) {
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
-      _currentImageBytes.addAll(base64Decode(split[1]));
-      await Future.delayed(const Duration(milliseconds: 20));
-      privateMessageReceivedEvent.broadcast(NewMessageEventArgs(
-          message: '',
-          imageBytes: _currentImageBytes,
-          sender: ContactsScreen.loggedInUsers
-              .firstWhere(
-                  (element) => element.macAddress == _currentImageSenderMac)
-              .name,
-          receiver: 'Private Message'));
+      if (listEquals(
+          Utility.hashImage(_currentImageBytes), base64Decode(split[1]))) {
+        await Future.delayed(const Duration(milliseconds: 50));
+        privateMessageReceivedEvent.broadcast(
+          NewMessageEventArgs(
+            message: '',
+            imageBytes: _currentImageBytes,
+            sender: ContactsScreen.loggedInUsers
+                .firstWhere(
+                    (element) => element.macAddress == _currentImageSenderMac)
+                .name,
+            receiver: "Private Message", //sender
+          ),
+        );
+      } else {
+        privateMessageReceivedEvent.broadcast(
+          NewMessageEventArgs(
+            message: 'Sent an image, but it was corrupted.',
+            sender: ContactsScreen.loggedInUsers
+                .firstWhere(
+                    (element) => element.macAddress == _currentImageSenderMac)
+                .name,
+            receiver: "Private Message", //sender
+          ),
+        );
+      }
+    }
+  }
+
+  void handleNameUpdate(List<String> split) {
+    if (split[1] != user.macAddress) {
+      if (kDebugMode) {
+        print("Name update received from ${split[1]}");
+      }
+      ContactsScreen.loggedInUsers
+          .firstWhere((element) => element.macAddress == split[1])
+          .name = split[2];
+      usersUpdatedEvent.broadcast();
     }
   }
 }

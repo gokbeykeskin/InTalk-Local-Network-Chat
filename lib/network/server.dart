@@ -2,12 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 
+import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
-import '../utils/messaging_protocol.dart';
+import '../auth/user.dart';
+import 'messaging_protocol.dart';
 import '../utils/utility_functions.dart';
-import 'client.dart';
+
+class AuthEventArgs extends EventArgs {
+  String macAddress;
+  String name;
+  AuthEventArgs({required this.macAddress, required this.name});
+}
 
 class CustomStreamController {
   StreamController<String> messageStreamController =
@@ -24,11 +31,13 @@ class LocalNetworkChat {
   List<Socket> connectedSockets = [];
   //the user which logged in from this device.
   User myUser;
-  // Start the server socket and listen for incoming client connections
   LocalNetworkChat({required this.myUser});
 
-  int? _currentImageReceiverPort;
+  List<String>? trustedDevices;
+  static Event authEvent = Event();
 
+  int? _currentImageReceiverPort;
+  bool? isUserAccepted;
   // A stream controller list for sending messages to all connected clients
   List<CustomStreamController> messageStreamControllers = [];
 
@@ -40,6 +49,11 @@ class LocalNetworkChat {
     if (kDebugMode) {
       print('Local IP address: $ipAddress');
     }
+
+    ContactsScreen.userAcceptanceEvent.subscribe((args) {
+      args as UserAcceptanceEventArgs;
+      isUserAccepted = args.accepted;
+    });
 
     // Create a server socket that listens for incoming client connections
     serverSocket = await ServerSocket.bind(ipAddress, 12345, shared: true);
@@ -82,7 +96,14 @@ class LocalNetworkChat {
 
   // Stop the server and close all client connections
   Future<void> stop() async {
+    if (kDebugMode) {
+      print("Stopping Server");
+    }
+    authEvent.unsubscribeAll();
     if (connectedSockets.length > 1) {
+      if (kDebugMode) {
+        print("Transfering the server");
+      }
       //if there is another client which can become server
       sendMessage(MessagingProtocol.becomeServer, connectedSockets[1]);
       for (var i = 2; i < connectedSockets.length; i++) {
@@ -146,17 +167,17 @@ class LocalNetworkChat {
       var split = message.split("@");
       if (split[0] == MessagingProtocol.heartbeat) {
         if (kDebugMode) {
-          print("HEARTBEAT RECEIVED FROM ${split[2]}");
+          print("Server: heartbeat received from ${split[2]}");
         }
         processHeartbeat(message, socket);
       } else if (split[0] == MessagingProtocol.broadcast) {
         if (kDebugMode) {
-          print("BROADCAST RECEIVED FROM ${split[1]}");
+          print("Server: broadcast message received from ${split[1]}");
         }
         processBroadcast(message, socket);
       } else if (split[0] == MessagingProtocol.private) {
         if (kDebugMode) {
-          print("PRIVATE MESSAGE RECEIVED FROM ${split[1]}");
+          print("Server: private message received from ${split[1]}");
         }
         processPrivateMessage(message, socket);
       } else if (split[0] == MessagingProtocol.broadcastImage ||
@@ -167,11 +188,35 @@ class LocalNetworkChat {
           split[0] == MessagingProtocol.privateImageContd ||
           split[0] == MessagingProtocol.privateImageEnd) {
         processPrivateImage(message, socket);
+      } else if (split[0] == MessagingProtocol.nameUpdate) {
+        if (kDebugMode) {
+          print("Server: name update received from ${split[1]}");
+        }
+        processNameUpdate(message, socket);
       }
     }
   }
 
-  void processHeartbeat(String message, Socket socket) async {
+  Future<void> processHeartbeat(String message, Socket socket) async {
+    var split = message.split("@");
+    List<String>? trustedDevices = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('trustedDevices');
+    trustedDevices ??= []; //if null, make it an empty list
+    if (!trustedDevices.contains(split[1]) && split[1] != myUser.macAddress) {
+      authEvent.broadcast(AuthEventArgs(macAddress: split[1], name: split[2]));
+      while (isUserAccepted == null) {
+        await Future.delayed(const Duration(
+            milliseconds:
+                500)); // wait for 500 milliseconds before checking again
+      }
+      if (!isUserAccepted!) {
+        sendMessage('${MessagingProtocol.rejected}@', socket);
+        kickUser(socket);
+        return;
+      }
+      isUserAccepted = null;
+    }
+
     sendMessageToAllExcept(
         message, socket); //send new client to all logged in clients
     for (var user in ContactsScreen.loggedInUsers) {
@@ -184,6 +229,13 @@ class LocalNetworkChat {
         //send this client to the new client since it is not in the list of logged in clients
         '${MessagingProtocol.heartbeat}@${myUser.macAddress}@${myUser.name}@${myUser.port}',
         socket);
+    for (var trustedDevice in trustedDevices) {
+      //send all trusted devices to the new client
+      sendMessage('${MessagingProtocol.trustedDevice}@$trustedDevice@', socket);
+    }
+    //send this device to the new client as a trusted device
+    sendMessage(
+        '${MessagingProtocol.trustedDevice}@${myUser.macAddress}@', socket);
   }
 
   void processBroadcast(String message, Socket socket) {
@@ -205,5 +257,15 @@ class LocalNetworkChat {
       _currentImageReceiverPort = int.parse(split[2]);
     }
     sendMessageToPort(message, _currentImageReceiverPort!);
+  }
+
+  void processNameUpdate(String message, Socket socket) {
+    sendMessageToAllExcept(message, socket);
+  }
+
+  void kickUser(Socket socket) {
+    isUserAccepted = null;
+    socket.destroy();
+    connectedSockets.remove(socket);
   }
 }

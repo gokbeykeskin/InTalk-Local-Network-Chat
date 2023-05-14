@@ -8,7 +8,8 @@ import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
-import '../../backend/client.dart';
+import '../../auth/user.dart';
+import '../../network/client.dart';
 import '../../utils/utility_functions.dart';
 import '../select_photo_options_screen.dart';
 
@@ -215,9 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ContactsScreen.ongoingImageSend = true;
         });
       }
-      if (Platform.isAndroid) {
-        img = await Utility.compressImage(img, '${img.path}compressed.jpeg');
-      }
+      img = await Utility.compressImage(img, '${img.path}compressed.jpeg');
       if (widget.isGeneralChat) {
         await widget.meClient.sendBroadcastImage(img.readAsBytesSync());
       } else {
@@ -230,12 +229,14 @@ class _ChatScreenState extends State<ChatScreen> {
           ContactsScreen.ongoingImageSend = false;
         });
       }
-      setState(() {
-        messages.insert(
-            0,
-            Message(
-                sender: widget.meClient.user.name, message: "", image: img));
-      });
+      if (mounted) {
+        setState(() {
+          messages.insert(
+              0,
+              Message(
+                  sender: widget.meClient.user.name, message: "", image: img));
+        });
+      }
     } on PlatformException catch (e) {
       if (kDebugMode) {
         print(e);

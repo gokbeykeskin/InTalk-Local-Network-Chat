@@ -13,4 +13,6 @@ class MessagingProtocol {
   static const privateImage = 'pi';
   static const privateImageContd = 'ci';
   static const privateImageEnd = 'ei';
+  static const rejected = 'rj';
+  static const requestImageAgain = 'ra';
 }

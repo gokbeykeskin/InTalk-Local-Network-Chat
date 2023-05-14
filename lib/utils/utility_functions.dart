@@ -1,16 +1,30 @@
-import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../backend/client.dart';
+import '../auth/user.dart';
 import '../screens/contacts_screen/contacts_screen.dart';
 
 class Utility {
+  static Future<String?> getDeviceId() async {
+    var deviceInfo = DeviceInfoPlugin();
+    if (Platform.isIOS) {
+      // import 'dart:io'
+      var iosDeviceInfo = await deviceInfo.iosInfo;
+      return iosDeviceInfo.identifierForVendor; // unique ID on iOS
+    } else if (Platform.isAndroid) {
+      var androidDeviceInfo = await deviceInfo.androidInfo;
+      return androidDeviceInfo.androidId; // unique ID on Android
+    }
+    return null;
+  }
+
   static Future<String> getNetworkIPAdress() async {
     List<NetworkInterface> interfaces = await NetworkInterface.list();
     for (NetworkInterface interface in interfaces) {
@@ -24,7 +38,7 @@ class Utility {
 
   static List<Uint8List> splitImage(Uint8List data) {
     final List<Uint8List> chunks = [];
-    const int chunkSize = 512; //bunu arttırarak deney yap.
+    const int chunkSize = 1024; //bunu arttırarak deney yap.
     int offset = 0;
     int remaining = data.length;
 
@@ -36,7 +50,6 @@ class Utility {
       remaining -= currentChunkSize;
       offset += currentChunkSize;
     }
-
     return chunks;
   }
 
@@ -47,31 +60,8 @@ class Utility {
     return File(croppedImage.path);
   }
 
-  static int mapImageSizeToQuality(int value,
-      {int maxInputValue = 150000,
-      int minOutputValue = 10,
-      int maxOutputValue = 100}) {
-    if (value > maxInputValue) {
-      return minOutputValue;
-    }
-    int percentage = ((maxInputValue - value) /
-                (maxInputValue / (maxOutputValue - minOutputValue)))
-            .round() +
-        minOutputValue;
-    if (kDebugMode) {
-      print(
-          "Quality:${percentage <= maxOutputValue ? percentage : maxOutputValue}");
-    }
-    return percentage <= maxOutputValue ? percentage : maxOutputValue;
-  }
-
   static Future<File> compressImage(File file, String targetPath) async {
-    int quality = mapImageSizeToQuality(file.lengthSync());
-    if (quality > 80) {
-      //if the calculated quality is more than 80, image does not need to be compressed.
-      //since it is a small image and compression usually makes it bigger.
-      return file;
-    }
+    const int quality = 15;
     var result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
@@ -98,8 +88,20 @@ class Utility {
   }
 
   static String generateRandomString(int len) {
-    var random = Random.secure();
-    var values = List<int>.generate(len, (i) => random.nextInt(255));
-    return base64Encode(values);
+    const alphanumericChars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random.secure();
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < 8; i++) {
+      buffer.write(alphanumericChars[random.nextInt(alphanumericChars.length)]);
+    }
+
+    final randomString = buffer.toString();
+    return randomString;
+  }
+
+  static List<int> hashImage(List<int> base64Image) {
+    return sha256.convert(base64Image).bytes;
   }
 }

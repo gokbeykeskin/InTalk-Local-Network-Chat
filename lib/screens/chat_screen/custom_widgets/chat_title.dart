@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../backend/client.dart';
+import '../../../auth/user.dart';
 
 class ChatTitle extends StatelessWidget {
   const ChatTitle({super.key, required this.toChatUser});

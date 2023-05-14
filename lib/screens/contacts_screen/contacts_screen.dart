@@ -1,23 +1,36 @@
 import 'dart:io';
 
+import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:local_chat/backend/client.dart';
-import 'package:local_chat/backend/server.dart';
+import 'package:local_chat/network/client.dart';
+import 'package:local_chat/network/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
+import 'package:local_chat/screens/contacts_screen/custom_widgets/add_trusted_device.dart';
+import 'package:local_chat/screens/contacts_screen/custom_widgets/rejected_dialog.dart';
 import 'package:local_chat/screens/home_screen.dart';
+import 'package:local_chat/screens/settings_screen/settings_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../auth/user.dart';
 import '../../utils/utility_functions.dart';
 import 'custom_widgets/contact.dart';
 
+class UserAcceptanceEventArgs extends EventArgs {
+  final bool accepted;
+  UserAcceptanceEventArgs({required this.accepted});
+}
+
 class ContactsScreen extends StatefulWidget {
-  final String name;
+  String name;
   static final User generalChatUser = User(name: "General Chat", port: 0);
-  const ContactsScreen({super.key, required this.name});
+  ContactsScreen({super.key, required this.name});
   static List<User> loggedInUsers = [];
-  static Map<User, List<Message>> messages =
-      {}; //holds all the messages for each receiver.
+  //holds all the messages for each receiver.
+  static Map<User, List<Message>> messages = {};
   static bool ongoingImageSend = false;
+  static Event userAcceptanceEvent = Event();
+  static SharedPreferences? trustedDevicePreferences;
 
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -29,6 +42,7 @@ class _ContactsScreenState extends State<ContactsScreen>
   LocalNetworkChat? server;
   LocalNetworkChatClient? client;
   String? _localPath;
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +50,12 @@ class _ContactsScreenState extends State<ContactsScreen>
     handleServerClientConnections();
     subscribeToEvents();
     Utility.getLocalPath().then((value) => _localPath = value);
+    getTrustedDevices();
+  }
+
+  void getTrustedDevices() async {
+    ContactsScreen.trustedDevicePreferences =
+        await SharedPreferences.getInstance();
   }
 
   @override
@@ -44,6 +64,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     server?.stop();
     client?.stop();
     _tabController.dispose();
+    ContactsScreen.userAcceptanceEvent.unsubscribeAll();
   }
 
   @override
@@ -53,14 +74,23 @@ class _ContactsScreenState extends State<ContactsScreen>
         title: const Text('InTalk'),
         actions: [
           IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () {
-                logout();
-                Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const HomeScreen()));
-              }),
+            onPressed: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          SettingsScreen(username: widget.name)));
+            },
+            icon: const Icon(Icons.settings),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              logout();
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (context) => const HomeScreen()));
+            },
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -144,18 +174,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         showDialog(
             context: context,
             builder: (context) {
-              return AlertDialog(
-                title: const Text("Can't create server."),
-                content: const Text(
-                    "You are probably not connected to a local network. Connect one and try again."),
-                actions: [
-                  TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      child: const Text("OK"))
-                ],
-              );
+              return const NotConnectedDialog();
             });
       }
     }
@@ -266,6 +285,41 @@ class _ContactsScreenState extends State<ContactsScreen>
       }
       ContactsScreen.messages[sender]!.insert(
           0, Message(message: args.message, sender: args.sender, image: file));
+    });
+
+    LocalNetworkChat.authEvent.subscribe(
+      (args) {
+        args as AuthEventArgs;
+        if (mounted) {
+          showModalBottomSheet(
+            isDismissible: false,
+            isScrollControlled: true,
+            context: context,
+            builder: (context) => TrustedDeviceBottomSheet(args: args),
+          );
+        }
+      },
+    );
+
+    LocalNetworkChatClient.acceptanceEvent.subscribe((args) {
+      args as AcceptanceEventArgs;
+      if (args.accepted == false) {
+        logout();
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()));
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return const RejectedDialog();
+          },
+        );
+      }
+    });
+
+    SettingsScreen.nameChangedEvent.subscribe((args) {
+      args as NameChangedEventArgs;
+      widget.name = args.name;
+      client?.changeName(args.name);
     });
   }
 }

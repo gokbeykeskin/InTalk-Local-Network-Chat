@@ -14,5 +14,5 @@ class MessagingProtocol {
   static const privateImageContd = 'ci';
   static const privateImageEnd = 'ei';
   static const rejected = 'rj';
-  static const requestImageAgain = 'ra';
+  static const serverIntermediateKey = 'sk';
 }

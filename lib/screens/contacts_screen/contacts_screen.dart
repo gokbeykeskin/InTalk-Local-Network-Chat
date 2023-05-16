@@ -172,10 +172,11 @@ class _ContactsScreenState extends State<ContactsScreen>
         Navigator.pushReplacement(context,
             MaterialPageRoute(builder: (context) => const HomeScreen()));
         showDialog(
-            context: context,
-            builder: (context) {
-              return const NotConnectedDialog();
-            });
+          context: context,
+          builder: (context) {
+            return const NotConnectedDialog();
+          },
+        );
       }
     }
   }

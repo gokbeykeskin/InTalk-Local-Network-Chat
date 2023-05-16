@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
+import 'package:local_chat/encrypt/encryption.dart';
 
 import '../auth/user.dart';
 import 'messaging_protocol.dart';
@@ -38,11 +39,13 @@ class LocalNetworkChatClient {
   static var acceptanceEvent = Event();
   String? _networkIpAdress;
   String? _networkIpWithoutLastDigits;
-
+  BigInt? intermediateKey;
   bool connected = false;
 
   final List<int> _currentImageBytes = [];
   String? _currentImageSenderMac;
+
+  ClientSideEncryption clientSideEncryption = ClientSideEncryption();
 
   LocalNetworkChatClient({required this.user});
 
@@ -95,18 +98,19 @@ class LocalNetworkChatClient {
       }
     } catch (e) {
       if (kDebugMode) {
-        print("Tried:$ipAddress");
+        //print("Tried:$ipAddress");
         return;
       }
     }
+    intermediateKey = clientSideEncryption.generateIntermediateKey();
+    sendOpenMessage(
+        "${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${socket?.port}@$intermediateKey");
     // Listen for incoming messages from the server
     socket?.listen((data) {
       // Convert the incoming data to a string
       var message = utf8.decode(data).trim();
       messageStreamController.add(message);
     });
-    sendMessage(
-        "${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${socket?.port}");
   }
 
   Future<void> stop() async {
@@ -169,6 +173,11 @@ class LocalNetworkChatClient {
 
   // Send a message to the server
   void sendMessage(String message) {
+    message = clientSideEncryption.encrypt(null, message);
+    socket?.write('$message||');
+  }
+
+  void sendOpenMessage(String message) {
     socket?.write('$message||');
   }
 
@@ -188,10 +197,13 @@ class LocalNetworkChatClient {
 
   //Splits the message and calls the appropriate handler
   void handleMessage(String message) {
-    // if (kDebugMode) {
-    //   print("Message from server: $message");
-    // }
     var split = message.split("@");
+
+    if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
+      message = clientSideEncryption.decrypt(null, message);
+      split = message.split("@");
+    }
+
     if (split[0] == MessagingProtocol.heartbeat) {
       if (kDebugMode) {
         print("Client: Heartbeat received from ${split[2]}");
@@ -245,6 +257,11 @@ class LocalNetworkChatClient {
         print("Client: Server Rejected the connection.");
       }
       acceptanceEvent.broadcast(AcceptanceEventArgs(accepted: false));
+    } else if (split[0] == MessagingProtocol.serverIntermediateKey) {
+      if (kDebugMode) {
+        print("Client: Server intermediate key received.");
+      }
+      clientSideEncryption.generateFinalKey(BigInt.parse(split[1]), split[2]);
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:local_chat/custom_widgets/default_appbar.dart';
+import 'package:local_chat/encrypt/encryption.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 class HomeScreen extends StatefulWidget {

@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
+import 'package:local_chat/encrypt/encryption.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../auth/user.dart';
@@ -41,7 +42,11 @@ class LocalNetworkChat {
   // A stream controller list for sending messages to all connected clients
   List<CustomStreamController> messageStreamControllers = [];
 
+  ServerSideEncryption? serverSideEncryption;
+
   Future<void> start() async {
+    serverSideEncryption = ServerSideEncryption(
+        sendOpenMessage: (message, socket) => sendOpenMessage(message, socket));
     // Get the IP address of the local device
     var ipAddress = await Utility.getNetworkIPAdress();
 
@@ -70,13 +75,11 @@ class LocalNetworkChat {
       socket.listen((data) {
         // Convert the incoming data to a string
         var message = utf8.decode(data).trim();
-        // if (kDebugMode) {
-        //   print('Message from Client:$message');
-        // }
+
         messageStreamControllers
             .firstWhere((element) => element.socket == socket)
             .messageStreamController
-            .add(message);
+            .add(message!);
       }, onDone: () {
         //when a client closes a socket
         // Remove the socket from the list of connected sockets
@@ -127,21 +130,28 @@ class LocalNetworkChat {
   void sendMessageToAll(String message) {
     // Send the message to all connected sockets
     for (var socket in connectedSockets) {
-      socket.write('$message||');
+      sendMessage(message, socket);
     }
   }
 
   void sendMessageToAllExcept(String message, Socket socket) {
     // Send the message to all connected sockets
     for (var s in connectedSockets) {
+      print("Sending to ${s.remotePort}, message: $message");
       if (s != socket) {
-        s.write('$message||');
+        sendMessage(message, s);
       }
     }
   }
 
   void sendMessage(String message, Socket socket) {
-    // Send the message to all connected sockets
+    // Encrypt and send a message to a socket.
+    message = serverSideEncryption?.encrypt(socket, message) ?? message;
+    socket.write('$message||');
+  }
+
+  void sendOpenMessage(String message, Socket socket) {
+    // Send the message to a socket.
     socket.write('$message||');
   }
 
@@ -150,7 +160,7 @@ class LocalNetworkChat {
     Socket socket = connectedSockets.firstWhere((element) {
       return element.remotePort == port;
     });
-    socket.write('$message||');
+    sendMessage(message, socket);
   }
 
   void parseMessages(String message, Socket socket) async {
@@ -163,37 +173,42 @@ class LocalNetworkChat {
   }
 
   void processMessages(String message, Socket socket) async {
-    if (message.contains("@")) {
-      var split = message.split("@");
-      if (split[0] == MessagingProtocol.heartbeat) {
-        if (kDebugMode) {
-          print("Server: heartbeat received from ${split[2]}");
-        }
-        processHeartbeat(message, socket);
-      } else if (split[0] == MessagingProtocol.broadcast) {
-        if (kDebugMode) {
-          print("Server: broadcast message received from ${split[1]}");
-        }
-        processBroadcast(message, socket);
-      } else if (split[0] == MessagingProtocol.private) {
-        if (kDebugMode) {
-          print("Server: private message received from ${split[1]}");
-        }
-        processPrivateMessage(message, socket);
-      } else if (split[0] == MessagingProtocol.broadcastImage ||
-          split[0] == MessagingProtocol.broadcastImageContd ||
-          split[0] == MessagingProtocol.broadcastImageEnd) {
-        processBroadcastImage(message, socket);
-      } else if (split[0] == MessagingProtocol.privateImage ||
-          split[0] == MessagingProtocol.privateImageContd ||
-          split[0] == MessagingProtocol.privateImageEnd) {
-        processPrivateImage(message, socket);
-      } else if (split[0] == MessagingProtocol.nameUpdate) {
-        if (kDebugMode) {
-          print("Server: name update received from ${split[1]}");
-        }
-        processNameUpdate(message, socket);
+    var split = message.split("@");
+    if (!(split[0] == MessagingProtocol.heartbeat)) {
+      message = serverSideEncryption!.decrypt(socket, message).trim();
+      split = message.split("@");
+    }
+
+    if (split[0] == MessagingProtocol.heartbeat) {
+      if (kDebugMode) {
+        print("Server: heartbeat received from ${split[2]}");
       }
+      serverSideEncryption?.generateKeyWithClient(
+          socket, BigInt.parse(split[4]));
+      processHeartbeat(message, socket);
+    } else if (split[0] == MessagingProtocol.broadcast) {
+      if (kDebugMode) {
+        print("Server: broadcast message received from ${split[1]}");
+      }
+      processBroadcast(message, socket);
+    } else if (split[0] == MessagingProtocol.private) {
+      if (kDebugMode) {
+        print("Server: private message received from ${split[1]}");
+      }
+      processPrivateMessage(message, socket);
+    } else if (split[0] == MessagingProtocol.broadcastImage ||
+        split[0] == MessagingProtocol.broadcastImageContd ||
+        split[0] == MessagingProtocol.broadcastImageEnd) {
+      processBroadcastImage(message, socket);
+    } else if (split[0] == MessagingProtocol.privateImage ||
+        split[0] == MessagingProtocol.privateImageContd ||
+        split[0] == MessagingProtocol.privateImageEnd) {
+      processPrivateImage(message, socket);
+    } else if (split[0] == MessagingProtocol.nameUpdate) {
+      if (kDebugMode) {
+        print("Server: name update received from ${split[1]}");
+      }
+      processNameUpdate(message, socket);
     }
   }
 

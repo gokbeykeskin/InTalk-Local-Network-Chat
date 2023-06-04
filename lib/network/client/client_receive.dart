@@ -1,193 +1,30 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:async';
 
-import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:local_chat/encrypt/encryption.dart';
 
-import '../auth/user.dart';
-import 'messaging_protocol.dart';
-import '../screens/contacts_screen/contacts_screen.dart';
-import '../utils/utility_functions.dart';
+import '../../auth/user.dart';
+import '../../screens/contacts_screen/contacts_screen.dart';
+import '../../utils/image_utils.dart';
+import '../messaging_protocol.dart';
+import 'client_events.dart';
 
-class NewMessageEventArgs extends EventArgs {
-  final String message;
-  final String sender;
-  final String receiver;
-  List<int>? imageBytes;
-  NewMessageEventArgs(
-      {required this.message,
-      required this.sender,
-      required this.receiver,
-      this.imageBytes});
-}
-
-class AcceptanceEventArgs extends EventArgs {
-  bool accepted;
-  AcceptanceEventArgs({required this.accepted});
-}
-
-class LocalNetworkChatClient {
+class ClientReceive {
+  ClientSideEncryption clientSideEncryption;
   User user;
-  Socket? socket;
-  static var broadcastMessageReceivedEvent = Event();
-  static var privateMessageReceivedEvent = Event();
-  static var usersUpdatedEvent = Event();
-  static var becomeServerEvent = Event();
-  static var connectToNewServerEvent = Event();
-  static var acceptanceEvent = Event();
-  String? _networkIpAdress;
-  String? _networkIpWithoutLastDigits;
-  BigInt? intermediateKey;
-  bool connected = false;
+
+  ClientReceive({required this.user, required this.clientSideEncryption});
 
   final List<int> _currentImageBytes = [];
   String? _currentImageSenderMac;
 
-  ClientSideEncryption clientSideEncryption = ClientSideEncryption();
-
-  LocalNetworkChatClient({required this.user});
-
-  // A stream controller for sending messages to the server
-  StreamController<String> messageStreamController =
-      StreamController.broadcast();
-
-  // A stream for receiving messages from the server
-  Stream<String> get messageStream => messageStreamController.stream;
-
-  Future<void> init() async {
-    _networkIpAdress = await Utility.getNetworkIPAdress();
-
-    List<String> components = _networkIpAdress!.split('.');
-
-    // Remove the last subpart
-    components.removeLast();
-
-    // Join the remaining subpart back into an IP address string
-    _networkIpWithoutLastDigits = '${components.join('.')}.';
-
-    try {
-      user.macAddress = (await Utility.getDeviceId())!;
-    } catch (e) {
-      if (kDebugMode) {
-        print("MAC ADDRESS GET FAILED:$e");
-        user.macAddress = "11223344"; //for macos debugging
-      }
-    }
-
-    messageStream.listen((message) {
-      parseMessages(message);
-    });
-  }
-
-  // Connect to the server
-  Future<void> connect(int lastIpDigit) async {
-    var ipAddress = lastIpDigit == -1
-        ? _networkIpAdress
-        : _networkIpWithoutLastDigits! + lastIpDigit.toString();
-
-    // Connect to the server socket
-    try {
-      socket = await Socket.connect(ipAddress, 12345,
-          timeout: const Duration(milliseconds: 2000));
-      user.port = socket?.port;
-      connected = true;
-      if (kDebugMode) {
-        print('Successfully connected to the server: $ipAddress:12345');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        //print("Tried:$ipAddress");
-        return;
-      }
-    }
-    intermediateKey = clientSideEncryption.generateIntermediateKey();
-    sendOpenMessage(
-        "${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${socket?.port}@$intermediateKey");
-    // Listen for incoming messages from the server
-    socket?.listen((data) {
-      // Convert the incoming data to a string
-      var message = utf8.decode(data).trim();
-      messageStreamController.add(message);
-    });
-  }
-
-  Future<void> stop() async {
-    // Close the client socket to disconnect from the server
-    usersUpdatedEvent.unsubscribeAll();
-    becomeServerEvent.unsubscribeAll();
-    connectToNewServerEvent.unsubscribeAll();
-    broadcastMessageReceivedEvent.unsubscribeAll();
-    privateMessageReceivedEvent.unsubscribeAll();
-    acceptanceEvent.unsubscribeAll();
-
-    await socket?.close();
-  }
-
-  void sendBroadcastMessage(String message) {
-    sendMessage("${MessagingProtocol.broadcast}@${user.macAddress}@$message");
-  }
-
-  void sendPrivateMessage(String message, User receiver) {
-    sendMessage(
-        "${MessagingProtocol.private}@${user.macAddress}@${receiver.port}@$message");
-  }
-
-  Future<void> sendBroadcastImage(Uint8List base64Image) async {
-    List<Uint8List> bytes = Utility.splitImage(base64Image);
-    List<int> hashedBytes = Utility.hashImage(base64Image);
-    sendMessage("${MessagingProtocol.broadcastImage}@${user.macAddress}");
-    for (var i = 0; i < bytes.length; i++) {
-      await Future.delayed(
-        const Duration(milliseconds: 50),
-      ); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
-      sendMessage(
-          '${MessagingProtocol.broadcastImageContd}@${base64Encode(bytes[i])}');
-    }
-    sendMessage(
-        '${MessagingProtocol.broadcastImageEnd}@${base64Encode(hashedBytes)}');
-  }
-
-  Future<void> sendPrivateImage(Uint8List base64Image, User receiver) async {
-    List<Uint8List> bytes = Utility.splitImage(base64Image);
-    List<int> hashedBytes = Utility.hashImage(base64Image);
-    sendMessage(
-        "${MessagingProtocol.privateImage}@${user.macAddress}@${receiver.port}");
-    for (var i = 0; i < bytes.length; i++) {
-      await Future.delayed(
-        const Duration(milliseconds: 50),
-      );
-      sendMessage(
-          '${MessagingProtocol.privateImageContd}@${base64Encode(bytes[i])}');
-    }
-    sendMessage(
-        '${MessagingProtocol.privateImageEnd}@${base64Encode(hashedBytes)}');
-  }
-
-  void changeName(String newName) {
-    user.name = newName;
-    sendMessage(
-        "${MessagingProtocol.nameUpdate}@${user.macAddress}@${user.name}");
-  }
-
-  // Send a message to the server
-  void sendMessage(String message) {
-    message = clientSideEncryption.encrypt(null, message);
-    socket?.write('$message||');
-  }
-
-  void sendOpenMessage(String message) {
-    socket?.write('$message||');
-  }
-
   // Messages are received in the following format
-  // message1_identifier@message1_data||message2_identifier@message2_data||message3_identifier@message3_data
+  // message1_identifier‽message1_data◊message2_identifier‽message2_data◊message3_identifier‽message3_data
   // This function parses the messages and calls handler
   void parseMessages(String message) {
-    if (message.contains("||")) {
-      var split = message.split('||');
-      for (var i = 0; i < split.length - 1; i++) {
+    if (message.contains("◊")) {
+      var split = message.split('◊');
+      for (var i = 0; i < split.length; i++) {
         if (split[i] != "") {
           handleMessage(split[i]);
         }
@@ -197,11 +34,11 @@ class LocalNetworkChatClient {
 
   //Splits the message and calls the appropriate handler
   void handleMessage(String message) {
-    var split = message.split("@");
+    var split = message.split("‽");
 
     if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
       message = clientSideEncryption.decrypt(null, message);
-      split = message.split("@");
+      split = message.split("‽");
     }
 
     if (split[0] == MessagingProtocol.heartbeat) {
@@ -229,21 +66,21 @@ class LocalNetworkChatClient {
         print("Client: Connect to new server received from server");
       }
       handleConnectToNewServer(split);
-    } else if (split[0] == MessagingProtocol.broadcast) {
+    } else if (split[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Client: Broadcast message received from ${split[1]}");
       }
       handleBroadcastMessage(split);
-    } else if (split[0] == MessagingProtocol.private) {
+    } else if (split[0] == MessagingProtocol.privateMessage) {
       if (kDebugMode) {
         print("Client: Private message received from ${split[1]}");
       }
       handlePrivateMessage(split);
-    } else if (split[0] == MessagingProtocol.broadcastImage ||
+    } else if (split[0] == MessagingProtocol.broadcastImageStart ||
         split[0] == MessagingProtocol.broadcastImageContd ||
         split[0] == MessagingProtocol.broadcastImageEnd) {
       handleBroadcastImage(split);
-    } else if (split[0] == MessagingProtocol.privateImage ||
+    } else if (split[0] == MessagingProtocol.privateImageStart ||
         split[0] == MessagingProtocol.privateImageContd ||
         split[0] == MessagingProtocol.privateImageEnd) {
       handlePrivateImage(split);
@@ -256,7 +93,8 @@ class LocalNetworkChatClient {
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
-      acceptanceEvent.broadcast(AcceptanceEventArgs(accepted: false));
+      ClientEvents.acceptanceEvent
+          .broadcast(AcceptanceEventArgs(accepted: false));
     } else if (split[0] == MessagingProtocol.serverIntermediateKey) {
       if (kDebugMode) {
         print("Client: Server intermediate key received.");
@@ -272,7 +110,7 @@ class LocalNetworkChatClient {
       }
       ContactsScreen.loggedInUsers.add(User(
           macAddress: split[1], name: split[2], port: int.parse(split[3])));
-      usersUpdatedEvent.broadcast();
+      ClientEvents.usersUpdatedEvent.broadcast();
     }
   }
 
@@ -294,21 +132,22 @@ class LocalNetworkChatClient {
     }
     ContactsScreen.loggedInUsers
         .removeWhere((element) => element.port.toString() == split[1]);
-    usersUpdatedEvent.broadcast();
+    ClientEvents.usersUpdatedEvent.broadcast();
   }
 
   void handleBecomeServer(List<String> split) {
-    becomeServerEvent.broadcast();
+    ClientEvents.becomeServerEvent.broadcast();
   }
 
   void handleConnectToNewServer(List<String> split) {
-    connectToNewServerEvent.broadcast();
+    ClientEvents.connectToNewServerEvent.broadcast();
   }
 
   void handleBroadcastMessage(List<String> split) async {
     if (split[1] != user.macAddress) {
-      broadcastMessageReceivedEvent.broadcast(
+      ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
+            senderMac: split[1],
             message: split[2], //message
             sender: ContactsScreen.loggedInUsers
                 .firstWhere((element) => element.macAddress == split[1])
@@ -320,8 +159,9 @@ class LocalNetworkChatClient {
   }
 
   void handlePrivateMessage(List<String> split) async {
-    privateMessageReceivedEvent.broadcast(
+    ClientEvents.privateMessageReceivedEvent.broadcast(
       NewMessageEventArgs(
+          senderMac: split[1],
           message: split[3], //message
           sender: ContactsScreen.loggedInUsers
               .firstWhere((element) => element.macAddress == split[1])
@@ -331,7 +171,7 @@ class LocalNetworkChatClient {
   }
 
   void handleBroadcastImage(List<String> split) async {
-    if (split[0] == MessagingProtocol.broadcastImage) {
+    if (split[0] == MessagingProtocol.broadcastImageStart) {
       if (kDebugMode) {
         print("Broadcast image received from ${split[1]}");
       }
@@ -342,11 +182,12 @@ class LocalNetworkChatClient {
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
       await Future.delayed(const Duration(milliseconds: 50));
       if (listEquals(
-          Utility.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        await Future.delayed(const Duration(milliseconds: 50));
+          ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
+        await Future.delayed(const Duration(milliseconds: 80));
 
-        broadcastMessageReceivedEvent.broadcast(
+        ClientEvents.broadcastMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
+            senderMac: _currentImageSenderMac!,
             message: '',
             imageBytes: _currentImageBytes,
             sender: ContactsScreen.loggedInUsers
@@ -357,8 +198,9 @@ class LocalNetworkChatClient {
           ),
         );
       } else {
-        broadcastMessageReceivedEvent.broadcast(
+        ClientEvents.broadcastMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
+            senderMac: _currentImageSenderMac!,
             message: 'Sent an image, but it was corrupted.',
             sender: ContactsScreen.loggedInUsers
                 .firstWhere(
@@ -372,7 +214,7 @@ class LocalNetworkChatClient {
   }
 
   void handlePrivateImage(List<String> split) async {
-    if (split[0] == MessagingProtocol.privateImage) {
+    if (split[0] == MessagingProtocol.privateImageStart) {
       if (kDebugMode) {
         print("Private image received from ${split[1]}");
       }
@@ -382,10 +224,11 @@ class LocalNetworkChatClient {
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
       if (listEquals(
-          Utility.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        await Future.delayed(const Duration(milliseconds: 50));
-        privateMessageReceivedEvent.broadcast(
+          ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
+        await Future.delayed(const Duration(milliseconds: 80));
+        ClientEvents.privateMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
+            senderMac: _currentImageSenderMac!,
             message: '',
             imageBytes: _currentImageBytes,
             sender: ContactsScreen.loggedInUsers
@@ -396,8 +239,9 @@ class LocalNetworkChatClient {
           ),
         );
       } else {
-        privateMessageReceivedEvent.broadcast(
+        ClientEvents.privateMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
+            senderMac: _currentImageSenderMac!,
             message: 'Sent an image, but it was corrupted.',
             sender: ContactsScreen.loggedInUsers
                 .firstWhere(
@@ -418,7 +262,7 @@ class LocalNetworkChatClient {
       ContactsScreen.loggedInUsers
           .firstWhere((element) => element.macAddress == split[1])
           .name = split[2];
-      usersUpdatedEvent.broadcast();
+      ClientEvents.usersUpdatedEvent.broadcast();
     }
   }
 }

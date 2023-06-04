@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:local_chat/custom_widgets/default_appbar.dart';
-import 'package:local_chat/encrypt/encryption.dart';
+import 'package:local_chat/screens/home_screen/custom_widgets/default_appbar.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -30,10 +29,12 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisAlignment: MainAxisAlignment.end,
           children: <Widget>[
+            const Icon(Icons.lan_outlined, size: 250),
+            const SizedBox(height: 100),
             const Text(
               'InTalk',
               style: TextStyle(
-                  fontSize: 50.0,
+                  fontSize: 60.0,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Lobster'),
             ),
@@ -41,23 +42,18 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 24.0,
             ),
             SizedBox(
-              height: 50,
+              height: 150,
               child: ElevatedButton(
                   onPressed: () {
                     showDialog(context: context, builder: (_) => nameInput());
                   },
-                  child: const Text('Connect with LAN')),
-            ),
-            const SizedBox(
-              height: 24,
-            ),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                  onPressed: () {
-                    showDialog(context: context, builder: (_) => nameInput());
-                  },
-                  child: const Text('Connect with Bluetooth')),
+                  child: const Text(
+                    'Connect',
+                    style: TextStyle(
+                        fontSize: 30.0,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Lobster'),
+                  )),
             ),
           ],
         ),

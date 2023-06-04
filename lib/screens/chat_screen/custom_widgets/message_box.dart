@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../fullscreen_image.dart';
+import 'fullscreen_image.dart';
 
 class MessageBox extends StatelessWidget {
   final String sender;

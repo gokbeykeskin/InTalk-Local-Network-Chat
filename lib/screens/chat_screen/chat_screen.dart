@@ -4,26 +4,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:local_chat/network/client/client_events.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
-
+import 'package:local_chat/utils/image_utils.dart';
 import '../../auth/user.dart';
-import '../../network/client.dart';
-import '../../utils/utility_functions.dart';
-import '../select_photo_options_screen.dart';
+import '../../network/client/client.dart';
+import 'custom_widgets/select_photo_options_screen.dart';
 
 class Message {
   final String? sender;
+  final String? senderMac;
   final String message;
   final File? image;
-  Message({required this.message, this.sender, this.image});
+  Message(
+      {required this.message,
+      required this.senderMac,
+      required this.sender,
+      this.image});
 }
 
 class ChatScreen extends StatefulWidget {
   final bool isGeneralChat;
   final User receiver;
-  final LocalNetworkChatClient meClient;
+  final LanClient meClient;
   const ChatScreen(
       {super.key,
       required this.isGeneralChat,
@@ -37,31 +42,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   List<Message> messages = [];
   final textFieldController = TextEditingController();
-  var snackBar = SnackBar(
-    behavior: SnackBarBehavior.fixed,
-    duration: const Duration(minutes: 30),
-    content: SizedBox(
-      height: 16,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Text(
-            'Sending Image',
-            overflow: TextOverflow.visible,
-          ),
-          SizedBox(width: 50),
-          SizedBox(
-            height: 16,
-            width: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+
   @override
   void dispose() {
     super.dispose();
@@ -83,7 +64,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
     if (widget.isGeneralChat) {
-      LocalNetworkChatClient.broadcastMessageReceivedEvent.subscribe((args) {
+      ClientEvents.broadcastMessageReceivedEvent.subscribe((args) {
         if (mounted) {
           setState(() {
             messages;
@@ -91,7 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     } else {
-      LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) {
+      ClientEvents.privateMessageReceivedEvent.subscribe((args) {
         if (mounted) {
           setState(() {
             messages;
@@ -99,6 +80,16 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     }
+    //if the person you are chatting logs out, pop to main window.
+    ClientEvents.usersUpdatedEvent.subscribe((args) {
+      if (!ContactsScreen.loggedInUsers
+              .any((user) => user.port == widget.receiver.port) &&
+          !widget.isGeneralChat) {
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      }
+    });
   }
 
   @override
@@ -130,7 +121,7 @@ class _ChatScreenState extends State<ChatScreen> {
           itemCount: messages.length,
           reverse: true,
           itemBuilder: (context, index) {
-            if (messages[index].sender == widget.meClient.user.name) {
+            if (messages[index].senderMac == widget.meClient.user.macAddress) {
               return MessageBox(
                   sender: messages[index].sender!,
                   message: messages[index].message,
@@ -169,14 +160,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   messages.insert(
                       0,
                       Message(
-                          sender: widget.meClient.user.name, message: value));
+                          sender: widget.meClient.user.name,
+                          senderMac: widget.meClient.user.macAddress,
+                          message: value));
                 });
               }
 
               if (widget.isGeneralChat) {
-                widget.meClient.sendBroadcastMessage(value);
+                widget.meClient.clientTransmit.sendBroadcastMessage(value);
               } else {
-                widget.meClient.sendPrivateMessage(value, widget.receiver);
+                widget.meClient.clientTransmit
+                    .sendPrivateMessage(value, widget.receiver);
               }
               if (value.isNotEmpty) {
                 textFieldController.clear();
@@ -207,20 +201,21 @@ class _ChatScreenState extends State<ChatScreen> {
       final image = await ImagePicker().pickImage(source: source);
       if (image == null) return;
       File? img = File(image.path);
-      img = await Utility.cropImage(imageFile: img);
+      img = await ImageUtils.cropImage(imageFile: img);
       if (img == null) return;
       if (context.mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(snackBar);
+        ScaffoldMessenger.of(context).showSnackBar(_imageSendingSnackBar());
         setState(() {
           ContactsScreen.ongoingImageSend = true;
         });
       }
-      img = await Utility.compressImage(img, '${img.path}compressed.jpeg');
+      img = await ImageUtils.compressImage(img, '${img.path}compressed.jpeg');
       if (widget.isGeneralChat) {
-        await widget.meClient.sendBroadcastImage(img.readAsBytesSync());
+        await widget.meClient.clientTransmit
+            .sendBroadcastImage(img.readAsBytesSync());
       } else {
-        await widget.meClient
+        await widget.meClient.clientTransmit
             .sendPrivateImage(img.readAsBytesSync(), widget.receiver);
       }
       if (mounted && context.mounted) {
@@ -234,7 +229,10 @@ class _ChatScreenState extends State<ChatScreen> {
           messages.insert(
               0,
               Message(
-                  sender: widget.meClient.user.name, message: "", image: img));
+                  sender: widget.meClient.user.name,
+                  senderMac: widget.meClient.user.macAddress,
+                  message: "",
+                  image: img));
         });
       }
     } on PlatformException catch (e) {
@@ -267,6 +265,34 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             );
           }),
+    );
+  }
+
+  SnackBar _imageSendingSnackBar() {
+    return SnackBar(
+      behavior: SnackBarBehavior.fixed,
+      duration: const Duration(minutes: 30),
+      content: SizedBox(
+        height: 16,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Text(
+              'Sending Image',
+              overflow: TextOverflow.visible,
+            ),
+            SizedBox(width: 50),
+            SizedBox(
+              height: 16,
+              width: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

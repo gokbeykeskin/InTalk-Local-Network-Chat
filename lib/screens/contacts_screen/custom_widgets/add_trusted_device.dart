@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:local_chat/network/server.dart';
+import 'package:local_chat/network/server/server.dart';
 
 import '../contacts_screen.dart';
 
@@ -17,38 +17,48 @@ class TrustedDeviceBottomSheet extends StatelessWidget {
       builder: (context, scrollController) {
         return SingleChildScrollView(
           controller: scrollController,
-          child: Column(children: [
-            const Text("A new Device wants to connect."),
-            const Text("Trust this Device?"),
-            Text("Mac Address: ${args.macAddress}"),
-            Text("Name: ${args.name}"),
-            Row(
+          child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                TextButton(
-                    onPressed: () {
-                      ContactsScreen.userAcceptanceEvent
-                          .broadcast(UserAcceptanceEventArgs(accepted: false));
-                      Navigator.pop(context);
-                    },
-                    child: const Text("No")),
-                TextButton(
-                    onPressed: () {
-                      ContactsScreen.userAcceptanceEvent
-                          .broadcast(UserAcceptanceEventArgs(accepted: true));
-                      List<String>? trustedDevices = ContactsScreen
-                          .trustedDevicePreferences
-                          ?.getStringList('trustedDevices');
-                      trustedDevices ??= [];
-                      trustedDevices.add(args.macAddress);
-                      ContactsScreen.trustedDevicePreferences
-                          ?.setStringList('trustedDevices', trustedDevices);
-                      Navigator.pop(context);
-                    },
-                    child: const Text("Yes"))
-              ],
-            )
-          ]),
+                const Text(
+                  "A new Device wants to connect.",
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const Text(
+                  "Trust this Device?",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Text("Mac Address"),
+                Text(args.macAddress),
+                Text("Name: ${args.name}"),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                        onPressed: () {
+                          ContactsScreen.userAcceptanceEvent.broadcast(
+                              UserAcceptanceEventArgs(accepted: false));
+                          Navigator.pop(context);
+                        },
+                        child: const Text("No")),
+                    TextButton(
+                        onPressed: () {
+                          ContactsScreen.userAcceptanceEvent.broadcast(
+                              UserAcceptanceEventArgs(accepted: true));
+                          List<String>? trustedDevices = ContactsScreen
+                              .trustedDevicePreferences
+                              ?.getStringList('trustedDevices');
+                          trustedDevices ??= [];
+                          trustedDevices.add(args.macAddress);
+                          ContactsScreen.trustedDevicePreferences
+                              ?.setStringList('trustedDevices', trustedDevices);
+                          Navigator.pop(context);
+                        },
+                        child: const Text("Yes"))
+                  ],
+                )
+              ]),
         );
       },
     );

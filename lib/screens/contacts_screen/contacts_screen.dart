@@ -3,17 +3,17 @@ import 'dart:io';
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:local_chat/network/client.dart';
-import 'package:local_chat/network/server.dart';
+import 'package:local_chat/network/client/client.dart';
+import 'package:local_chat/network/client/client_events.dart';
+import 'package:local_chat/network/server/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
 import 'package:local_chat/screens/contacts_screen/custom_widgets/add_trusted_device.dart';
 import 'package:local_chat/screens/contacts_screen/custom_widgets/rejected_dialog.dart';
-import 'package:local_chat/screens/home_screen.dart';
+import 'package:local_chat/screens/home_screen/home_screen.dart';
 import 'package:local_chat/screens/settings_screen/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../auth/user.dart';
-import '../../utils/utility_functions.dart';
+import '../../utils/image_utils.dart';
 import 'custom_widgets/contact.dart';
 
 class UserAcceptanceEventArgs extends EventArgs {
@@ -21,6 +21,7 @@ class UserAcceptanceEventArgs extends EventArgs {
   UserAcceptanceEventArgs({required this.accepted});
 }
 
+//ignore: must_be_immutable
 class ContactsScreen extends StatefulWidget {
   String name;
   static final User generalChatUser = User(name: "General Chat", port: 0);
@@ -39,8 +40,8 @@ class ContactsScreen extends StatefulWidget {
 class _ContactsScreenState extends State<ContactsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  LocalNetworkChat? server;
-  LocalNetworkChatClient? client;
+  LanServer? server;
+  LanClient? client;
   String? _localPath;
 
   @override
@@ -49,7 +50,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     _tabController = TabController(length: 2, vsync: this);
     handleServerClientConnections();
     subscribeToEvents();
-    Utility.getLocalPath().then((value) => _localPath = value);
+    ImageUtils.getLocalPath().then((value) => _localPath = value);
     getTrustedDevices();
   }
 
@@ -65,6 +66,8 @@ class _ContactsScreenState extends State<ContactsScreen>
     client?.stop();
     _tabController.dispose();
     ContactsScreen.userAcceptanceEvent.unsubscribeAll();
+    //when change name event should be cleared.
+    SettingsScreen.nameChangedEvent.unsubscribeAll();
   }
 
   @override
@@ -152,13 +155,13 @@ class _ContactsScreenState extends State<ContactsScreen>
 //tries to connect to a server. If there is no server, it will establish a server and connect to it.
 //this is called on a new login and it is the generic case.
   void handleServerClientConnections() async {
-    client = LocalNetworkChatClient(user: User(name: widget.name));
+    client = LanClient(user: User(name: widget.name));
     await client?.init();
     await tryConnections(client!);
     if (client!.connected) return;
     try {
       //if there is no server, become both a server and a client
-      server = LocalNetworkChat(myUser: client!.user);
+      server = LanServer(myUser: client!.user);
       await server?.start();
       client?.connect(-1); //connect to your own ip.
       if (kDebugMode) {
@@ -169,14 +172,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         print("Can't create server.: $e");
       }
       if (mounted) {
-        Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()));
-        showDialog(
-          context: context,
-          builder: (context) {
-            return const NotConnectedDialog();
-          },
-        );
+        _noConnection();
       }
     }
   }
@@ -187,10 +183,10 @@ class _ContactsScreenState extends State<ContactsScreen>
         ContactsScreen.loggedInUsers.clear();
       });
     }
-    client = LocalNetworkChatClient(user: User(name: widget.name));
+    client = LanClient(user: User(name: widget.name));
     await client?.init();
 
-    server = LocalNetworkChat(myUser: client!.user);
+    server = LanServer(myUser: client!.user);
     await server?.start();
     client?.connect(-1);
   }
@@ -201,13 +197,13 @@ class _ContactsScreenState extends State<ContactsScreen>
         ContactsScreen.loggedInUsers.clear();
       });
     }
-    client = LocalNetworkChatClient(user: User(name: widget.name));
+    client = LanClient(user: User(name: widget.name));
     await client?.init();
 
     await tryConnections(client!);
   }
 
-  Future<void> tryConnections(LocalNetworkChatClient client) async {
+  Future<void> tryConnections(LanClient client) async {
     List<Future<void>> connectFutures = [];
 
     for (int i = 0; i < 256; i++) {
@@ -224,7 +220,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         ContactsScreen.loggedInUsers.clear();
       });
     }
-
+    ClientEvents.connectionLostEvent.unsubscribeAll();
     if (server != null) {
       await server?.stop();
     } else {
@@ -237,7 +233,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   void subscribeToEvents() {
     //Every time someone updates the list of users, state will be set in order to update the UI.
-    LocalNetworkChatClient.usersUpdatedEvent.subscribe((args) {
+    ClientEvents.usersUpdatedEvent.subscribe((args) {
       if (kDebugMode) {
         print(
             "Users updated. New Length:${ContactsScreen.loggedInUsers.length}");
@@ -249,19 +245,18 @@ class _ContactsScreenState extends State<ContactsScreen>
         });
       }
     });
-    LocalNetworkChatClient.becomeServerEvent.subscribe((args) {
+    ClientEvents.becomeServerEvent.subscribe((args) {
       becomeServer();
     });
-    LocalNetworkChatClient.connectToNewServerEvent.subscribe((args) {
+    ClientEvents.connectToNewServerEvent.subscribe((args) {
       connectToNewServer();
     });
 
-    LocalNetworkChatClient.broadcastMessageReceivedEvent
-        .subscribe((args) async {
+    ClientEvents.broadcastMessageReceivedEvent.subscribe((args) async {
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${Utility.generateRandomString(5)}.jpeg');
+        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.jpeg');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }
@@ -269,26 +264,36 @@ class _ContactsScreenState extends State<ContactsScreen>
         ContactsScreen.messages[ContactsScreen.generalChatUser] = [];
       }
       ContactsScreen.messages[ContactsScreen.generalChatUser]!.insert(
-          0, Message(message: args.message, sender: args.sender, image: file));
+          0,
+          Message(
+              message: args.message,
+              sender: args.sender,
+              senderMac: args.senderMac,
+              image: file));
     });
 
-    LocalNetworkChatClient.privateMessageReceivedEvent.subscribe((args) async {
+    ClientEvents.privateMessageReceivedEvent.subscribe((args) async {
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${Utility.generateRandomString(5)}.jpeg');
+        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.jpeg');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }
-      User sender = Utility.getUserByName(args.sender);
+      User sender = ImageUtils.getUserByName(args.sender);
       if (ContactsScreen.messages[sender] == null) {
         ContactsScreen.messages[sender] = [];
       }
       ContactsScreen.messages[sender]!.insert(
-          0, Message(message: args.message, sender: args.sender, image: file));
+          0,
+          Message(
+              message: args.message,
+              senderMac: args.senderMac,
+              sender: args.sender,
+              image: file));
     });
 
-    LocalNetworkChat.authEvent.subscribe(
+    LanServer.authEvent.subscribe(
       (args) {
         args as AuthEventArgs;
         if (mounted) {
@@ -302,7 +307,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       },
     );
 
-    LocalNetworkChatClient.acceptanceEvent.subscribe((args) {
+    ClientEvents.acceptanceEvent.subscribe((args) {
       args as AcceptanceEventArgs;
       if (args.accepted == false) {
         logout();
@@ -317,10 +322,30 @@ class _ContactsScreenState extends State<ContactsScreen>
       }
     });
 
+    ClientEvents.connectionLostEvent.subscribe((args) {
+      if (kDebugMode) {
+        print("Connection lost.");
+      }
+      logout();
+      if (mounted) {
+        _noConnection();
+      }
+    });
     SettingsScreen.nameChangedEvent.subscribe((args) {
       args as NameChangedEventArgs;
       widget.name = args.name;
-      client?.changeName(args.name);
+      client?.clientTransmit.changeName(args.name);
     });
+  }
+
+  void _noConnection() {
+    Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+    showDialog(
+      context: context,
+      builder: (context) {
+        return const NotConnectedDialog();
+      },
+    );
   }
 }

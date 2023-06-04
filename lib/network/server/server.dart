@@ -7,9 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:local_chat/encrypt/encryption.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
-import '../auth/user.dart';
-import 'messaging_protocol.dart';
-import '../utils/utility_functions.dart';
+import '../../auth/user.dart';
+import '../messaging_protocol.dart';
+import '../../utils/lan_utils.dart';
 
 class AuthEventArgs extends EventArgs {
   String macAddress;
@@ -25,14 +25,14 @@ class CustomStreamController {
   CustomStreamController({required this.socket});
 }
 
-class LocalNetworkChat {
+class LanServer {
   // Create a server socket that listens for incoming client connections
   ServerSocket? serverSocket;
   // A list of connected sockets
   List<Socket> connectedSockets = [];
   //the user which logged in from this device.
   User myUser;
-  LocalNetworkChat({required this.myUser});
+  LanServer({required this.myUser});
 
   List<String>? trustedDevices;
   static Event authEvent = Event();
@@ -48,7 +48,7 @@ class LocalNetworkChat {
     serverSideEncryption = ServerSideEncryption(
         sendOpenMessage: (message, socket) => sendOpenMessage(message, socket));
     // Get the IP address of the local device
-    var ipAddress = await Utility.getNetworkIPAdress();
+    var ipAddress = await LanUtils.getNetworkIPAdress();
 
     // Print the IP address to the console
     if (kDebugMode) {
@@ -79,14 +79,14 @@ class LocalNetworkChat {
         messageStreamControllers
             .firstWhere((element) => element.socket == socket)
             .messageStreamController
-            .add(message!);
+            .add(message);
       }, onDone: () {
         //when a client closes a socket
         // Remove the socket from the list of connected sockets
         connectedSockets.remove(socket);
         //send the logout message to all clients
         try {
-          sendMessageToAll('${MessagingProtocol.logout}@${socket.remotePort}');
+          sendMessageToAll('${MessagingProtocol.logout}‽${socket.remotePort}');
         } catch (e) {
           if (kDebugMode) {
             print(
@@ -137,7 +137,6 @@ class LocalNetworkChat {
   void sendMessageToAllExcept(String message, Socket socket) {
     // Send the message to all connected sockets
     for (var s in connectedSockets) {
-      print("Sending to ${s.remotePort}, message: $message");
       if (s != socket) {
         sendMessage(message, s);
       }
@@ -147,12 +146,12 @@ class LocalNetworkChat {
   void sendMessage(String message, Socket socket) {
     // Encrypt and send a message to a socket.
     message = serverSideEncryption?.encrypt(socket, message) ?? message;
-    socket.write('$message||');
+    socket.write('$message◊');
   }
 
   void sendOpenMessage(String message, Socket socket) {
     // Send the message to a socket.
-    socket.write('$message||');
+    socket.write('$message◊');
   }
 
   void sendMessageToPort(String message, int port) {
@@ -164,19 +163,19 @@ class LocalNetworkChat {
   }
 
   void parseMessages(String message, Socket socket) async {
-    if (message.contains("||")) {
-      var split = message.split("||");
-      for (var i = 0; i < split.length - 1; i++) {
-        processMessages(split[i], socket);
+    if (message.contains("◊")) {
+      var splits = message.split("◊");
+      for (var split in splits) {
+        processMessages(split, socket);
       }
     }
   }
 
   void processMessages(String message, Socket socket) async {
-    var split = message.split("@");
+    var split = message.split("‽");
     if (!(split[0] == MessagingProtocol.heartbeat)) {
       message = serverSideEncryption!.decrypt(socket, message).trim();
-      split = message.split("@");
+      split = message.split("‽");
     }
 
     if (split[0] == MessagingProtocol.heartbeat) {
@@ -186,21 +185,21 @@ class LocalNetworkChat {
       serverSideEncryption?.generateKeyWithClient(
           socket, BigInt.parse(split[4]));
       processHeartbeat(message, socket);
-    } else if (split[0] == MessagingProtocol.broadcast) {
+    } else if (split[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Server: broadcast message received from ${split[1]}");
       }
-      processBroadcast(message, socket);
-    } else if (split[0] == MessagingProtocol.private) {
+      processBroadcastMessage(message, socket);
+    } else if (split[0] == MessagingProtocol.privateMessage) {
       if (kDebugMode) {
         print("Server: private message received from ${split[1]}");
       }
       processPrivateMessage(message, socket);
-    } else if (split[0] == MessagingProtocol.broadcastImage ||
+    } else if (split[0] == MessagingProtocol.broadcastImageStart ||
         split[0] == MessagingProtocol.broadcastImageContd ||
         split[0] == MessagingProtocol.broadcastImageEnd) {
       processBroadcastImage(message, socket);
-    } else if (split[0] == MessagingProtocol.privateImage ||
+    } else if (split[0] == MessagingProtocol.privateImageStart ||
         split[0] == MessagingProtocol.privateImageContd ||
         split[0] == MessagingProtocol.privateImageEnd) {
       processPrivateImage(message, socket);
@@ -213,7 +212,7 @@ class LocalNetworkChat {
   }
 
   Future<void> processHeartbeat(String message, Socket socket) async {
-    var split = message.split("@");
+    var split = message.split("‽");
     List<String>? trustedDevices = ContactsScreen.trustedDevicePreferences
         ?.getStringList('trustedDevices');
     trustedDevices ??= []; //if null, make it an empty list
@@ -225,7 +224,7 @@ class LocalNetworkChat {
                 500)); // wait for 500 milliseconds before checking again
       }
       if (!isUserAccepted!) {
-        sendMessage('${MessagingProtocol.rejected}@', socket);
+        sendMessage('${MessagingProtocol.rejected}‽', socket);
         kickUser(socket);
         return;
       }
@@ -237,28 +236,28 @@ class LocalNetworkChat {
     for (var user in ContactsScreen.loggedInUsers) {
       //send all logged in clients to the new client
       sendMessage(
-          '${MessagingProtocol.heartbeat}@${user.macAddress}@${user.name}@${user.port}',
+          '${MessagingProtocol.heartbeat}‽${user.macAddress}‽${user.name}‽${user.port}',
           socket);
     }
     sendMessage(
         //send this client to the new client since it is not in the list of logged in clients
-        '${MessagingProtocol.heartbeat}@${myUser.macAddress}@${myUser.name}@${myUser.port}',
+        '${MessagingProtocol.heartbeat}‽${myUser.macAddress}‽${myUser.name}‽${myUser.port}',
         socket);
     for (var trustedDevice in trustedDevices) {
       //send all trusted devices to the new client
-      sendMessage('${MessagingProtocol.trustedDevice}@$trustedDevice@', socket);
+      sendMessage('${MessagingProtocol.trustedDevice}‽$trustedDevice‽', socket);
     }
     //send this device to the new client as a trusted device
     sendMessage(
-        '${MessagingProtocol.trustedDevice}@${myUser.macAddress}@', socket);
+        '${MessagingProtocol.trustedDevice}‽${myUser.macAddress}‽', socket);
   }
 
-  void processBroadcast(String message, Socket socket) {
+  void processBroadcastMessage(String message, Socket socket) {
     sendMessageToAllExcept(message, socket);
   }
 
   void processPrivateMessage(String message, Socket socket) {
-    var split = message.split("@");
+    var split = message.split("‽");
     sendMessageToPort(message, int.parse(split[2]));
   }
 
@@ -267,8 +266,8 @@ class LocalNetworkChat {
   }
 
   void processPrivateImage(String message, Socket socket) {
-    var split = message.split("@");
-    if (split[0] == MessagingProtocol.privateImage) {
+    var split = message.split("‽");
+    if (split[0] == MessagingProtocol.privateImageStart) {
       _currentImageReceiverPort = int.parse(split[2]);
     }
     sendMessageToPort(message, _currentImageReceiverPort!);

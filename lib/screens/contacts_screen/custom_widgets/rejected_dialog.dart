@@ -26,7 +26,7 @@ class NotConnectedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Can't create server."),
+      title: const Text("Something went wrong."),
       content: const Text(
           "You are probably not connected to a local network. Connect one and try again."),
       actions: [

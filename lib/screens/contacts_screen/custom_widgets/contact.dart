@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:local_chat/network/client.dart';
+import 'package:local_chat/network/client/client.dart';
 
 import '../../chat_screen/chat_screen.dart';
 import '../contacts_screen.dart';
@@ -7,7 +7,7 @@ import '../contacts_screen.dart';
 class Contact extends StatelessWidget {
   final String name;
   final int port;
-  final LocalNetworkChatClient client;
+  final LanClient client;
   final int index;
   const Contact(
       {super.key,

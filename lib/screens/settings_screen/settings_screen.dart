@@ -1,7 +1,6 @@
 import 'package:event/event.dart';
 import 'package:flutter/material.dart';
-import 'package:local_chat/network/client.dart';
-
+import 'package:local_chat/network/client/client_events.dart';
 import '../contacts_screen/contacts_screen.dart';
 
 class NameChangedEventArgs extends EventArgs {
@@ -9,6 +8,7 @@ class NameChangedEventArgs extends EventArgs {
   NameChangedEventArgs({required this.name});
 }
 
+//ignore: must_be_immutable
 class SettingsScreen extends StatefulWidget {
   String username;
   static Event nameChangedEvent = Event();
@@ -35,7 +35,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     super.dispose();
-    LocalNetworkChatClient.usersUpdatedEvent.unsubscribeAll();
     _scaffoldMessengerKey.currentState?.clearSnackBars();
   }
 
@@ -159,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _subscribeToEvents() {
-    LocalNetworkChatClient.usersUpdatedEvent.subscribe((args) {
+    ClientEvents.usersUpdatedEvent.subscribe((args) {
       if (mounted) {
         setState(() {
           trustedDevices = ContactsScreen.trustedDevicePreferences
@@ -225,9 +224,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() {
                   widget.username = _newUsername;
                 });
+                Navigator.of(context).pop();
+
                 SettingsScreen.nameChangedEvent
                     .broadcast(NameChangedEventArgs(name: _newUsername));
-                Navigator.of(context).pop();
               },
               child: const Text('Save'),
             ),

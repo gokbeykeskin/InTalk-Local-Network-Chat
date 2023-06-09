@@ -48,25 +48,23 @@ class _ContactsScreenState extends State<ContactsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    handleServerClientConnections();
-    subscribeToEvents();
+    _handleServerClientConnections();
+    _subscribeToEvents();
     ImageUtils.getLocalPath().then((value) => _localPath = value);
-    getTrustedDevices();
+    _getTrustedDevices();
   }
 
-  void getTrustedDevices() async {
+  void _getTrustedDevices() async {
     ContactsScreen.trustedDevicePreferences =
         await SharedPreferences.getInstance();
   }
 
   @override
   void dispose() {
+    _logout();
     super.dispose();
-    server?.stop();
-    client?.stop();
     _tabController.dispose();
     ContactsScreen.userAcceptanceEvent.unsubscribeAll();
-    //when change name event should be cleared.
     SettingsScreen.nameChangedEvent.unsubscribeAll();
   }
 
@@ -74,7 +72,8 @@ class _ContactsScreenState extends State<ContactsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('InTalk'),
+        title:
+            server == null ? const Text('InTalk') : const Text('InTalk (HOST)'),
         actions: [
           IconButton(
             onPressed: () {
@@ -89,7 +88,6 @@ class _ContactsScreenState extends State<ContactsScreen>
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              logout();
               Navigator.pushReplacement(context,
                   MaterialPageRoute(builder: (context) => const HomeScreen()));
             },
@@ -154,9 +152,9 @@ class _ContactsScreenState extends State<ContactsScreen>
 
 //tries to connect to a server. If there is no server, it will establish a server and connect to it.
 //this is called on a new login and it is the generic case.
-  void handleServerClientConnections() async {
+  void _handleServerClientConnections() async {
     client = LanClient(user: User(name: widget.name));
-    await client?.init();
+    await client?.start();
     await tryConnections(client!);
     if (client!.connected) return;
     try {
@@ -177,35 +175,34 @@ class _ContactsScreenState extends State<ContactsScreen>
     }
   }
 
-  void becomeServer() async {
+  void _becomeServer() async {
     if (mounted) {
       setState(() {
         ContactsScreen.loggedInUsers.clear();
       });
     }
     client = LanClient(user: User(name: widget.name));
-    await client?.init();
+    await client?.start();
 
     server = LanServer(myUser: client!.user);
     await server?.start();
     client?.connect(-1);
   }
 
-  void connectToNewServer() async {
+  void _connectToNewServer() async {
     if (mounted) {
       setState(() {
         ContactsScreen.loggedInUsers.clear();
       });
     }
     client = LanClient(user: User(name: widget.name));
-    await client?.init();
+    await client?.start();
 
     await tryConnections(client!);
   }
 
   Future<void> tryConnections(LanClient client) async {
     List<Future<void>> connectFutures = [];
-
     for (int i = 0; i < 256; i++) {
       connectFutures.add(client.connect(i));
     }
@@ -214,24 +211,20 @@ class _ContactsScreenState extends State<ContactsScreen>
     return;
   }
 
-  void logout() async {
-    if (mounted) {
-      setState(() {
-        ContactsScreen.loggedInUsers.clear();
-      });
-    }
+  void _logout() async {
+    ContactsScreen.loggedInUsers.clear();
     ClientEvents.connectionLostEvent.unsubscribeAll();
     if (server != null) {
       await server?.stop();
     } else {
-      await client?.stop();
       if (kDebugMode) {
         print("There is no server instance to stop.");
       }
     }
+    client?.stop();
   }
 
-  void subscribeToEvents() {
+  void _subscribeToEvents() {
     //Every time someone updates the list of users, state will be set in order to update the UI.
     ClientEvents.usersUpdatedEvent.subscribe((args) {
       if (kDebugMode) {
@@ -246,10 +239,10 @@ class _ContactsScreenState extends State<ContactsScreen>
       }
     });
     ClientEvents.becomeServerEvent.subscribe((args) {
-      becomeServer();
+      _becomeServer();
     });
     ClientEvents.connectToNewServerEvent.subscribe((args) {
-      connectToNewServer();
+      _connectToNewServer();
     });
 
     ClientEvents.broadcastMessageReceivedEvent.subscribe((args) async {
@@ -310,7 +303,6 @@ class _ContactsScreenState extends State<ContactsScreen>
     ClientEvents.acceptanceEvent.subscribe((args) {
       args as AcceptanceEventArgs;
       if (args.accepted == false) {
-        logout();
         Navigator.pushReplacement(context,
             MaterialPageRoute(builder: (context) => const HomeScreen()));
         showDialog(
@@ -326,7 +318,6 @@ class _ContactsScreenState extends State<ContactsScreen>
       if (kDebugMode) {
         print("Connection lost.");
       }
-      logout();
       if (mounted) {
         _noConnection();
       }

@@ -39,15 +39,15 @@ class MessageBox extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(message),
                     getImage(context),
+                    Text(message),
                   ],
                 ),
               ))),
     );
   }
 
-  getImage(BuildContext context) {
+  Widget getImage(BuildContext context) {
     if (image == null) {
       return const SizedBox(width: 0, height: 0);
     } else {

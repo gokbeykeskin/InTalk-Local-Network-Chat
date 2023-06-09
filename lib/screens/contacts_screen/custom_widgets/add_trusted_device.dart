@@ -39,6 +39,22 @@ class TrustedDeviceBottomSheet extends StatelessWidget {
                         onPressed: () {
                           ContactsScreen.userAcceptanceEvent.broadcast(
                               UserAcceptanceEventArgs(accepted: false));
+                          List<String>? bannedDeviceMACs = ContactsScreen
+                                  .trustedDevicePreferences
+                                  ?.getStringList('bannedDeviceMACs') ??
+                              [];
+                          List<String>? bannedDeviceNames = ContactsScreen
+                                  .trustedDevicePreferences
+                                  ?.getStringList('bannedDeviceNames') ??
+                              [];
+                          bannedDeviceMACs.add(args.macAddress);
+                          bannedDeviceNames.add(args.name);
+                          ContactsScreen.trustedDevicePreferences
+                              ?.setStringList(
+                                  'bannedDeviceMACs', bannedDeviceMACs);
+                          ContactsScreen.trustedDevicePreferences
+                              ?.setStringList(
+                                  'bannedDeviceNames', bannedDeviceNames);
                           Navigator.pop(context);
                         },
                         child: const Text("No")),
@@ -46,13 +62,23 @@ class TrustedDeviceBottomSheet extends StatelessWidget {
                         onPressed: () {
                           ContactsScreen.userAcceptanceEvent.broadcast(
                               UserAcceptanceEventArgs(accepted: true));
-                          List<String>? trustedDevices = ContactsScreen
-                              .trustedDevicePreferences
-                              ?.getStringList('trustedDevices');
-                          trustedDevices ??= [];
-                          trustedDevices.add(args.macAddress);
+                          List<String>? trustedDeviceMACs = ContactsScreen
+                                  .trustedDevicePreferences
+                                  ?.getStringList('trustedDeviceMACs') ??
+                              [];
+                          List<String>? trustedDeviceNames = ContactsScreen
+                                  .trustedDevicePreferences
+                                  ?.getStringList('trustedDeviceNames') ??
+                              [];
+
+                          trustedDeviceMACs.add(args.macAddress);
+                          trustedDeviceNames.add(args.name);
                           ContactsScreen.trustedDevicePreferences
-                              ?.setStringList('trustedDevices', trustedDevices);
+                              ?.setStringList(
+                                  'trustedDeviceMACs', trustedDeviceMACs);
+                          ContactsScreen.trustedDevicePreferences
+                              ?.setStringList(
+                                  'trustedDeviceNames', trustedDeviceNames);
                           Navigator.pop(context);
                         },
                         child: const Text("Yes"))

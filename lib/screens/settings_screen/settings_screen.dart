@@ -1,6 +1,7 @@
 import 'package:event/event.dart';
 import 'package:flutter/material.dart';
 import 'package:local_chat/network/client/client_events.dart';
+import '../../network/server/server.dart';
 import '../contacts_screen/contacts_screen.dart';
 
 class NameChangedEventArgs extends EventArgs {
@@ -22,14 +23,22 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _newUsername = '';
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
-  List<String> trustedDevices = ContactsScreen.trustedDevicePreferences
-          ?.getStringList('trustedDevices') ??
+  List<String> trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
+          ?.getStringList('trustedDeviceMACs') ??
+      [];
+  List<String> trustedDeviceNames = ContactsScreen.trustedDevicePreferences
+          ?.getStringList('trustedDeviceNames') ??
+      [];
+  List<String> bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
+          ?.getStringList('bannedDeviceMACs') ??
+      [];
+  List<String> bannedDeviceNames = ContactsScreen.trustedDevicePreferences
+          ?.getStringList('bannedDeviceNames') ??
       [];
   @override
   void initState() {
-    super.initState();
     _subscribeToEvents();
+    super.initState();
   }
 
   @override
@@ -89,111 +98,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: trustedDevices.length,
-                itemBuilder: (BuildContext context, int index) {
-                  return Dismissible(
-                    key: ValueKey(trustedDevices[index]),
-                    direction: DismissDirection.startToEnd,
-                    background: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.red,
-                      ),
-                      padding: const EdgeInsets.only(left: 16),
-                      alignment: Alignment.centerLeft,
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (direction) =>
-                        _removeDeviceFromTrustedList(trustedDevices[index]),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      child: ListTile(
-                        title: Text(trustedDevices[index]),
-                        trailing: const Icon(Icons.arrow_forward_ios),
-                        onTap: () {
-                          // Handle the button tap event
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
+          _trustedDevicesList(),
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  ContactsScreen.trustedDevicePreferences
-                      ?.setStringList('trustedDevices', []);
-                  trustedDevices = [];
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Banned Devices',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              child: const Text('Forget all trusted devices'),
             ),
           ),
+          _bannedDevicesList(),
           const SizedBox(height: 16),
         ],
       ),
-    );
-  }
-
-  void _subscribeToEvents() {
-    ClientEvents.usersUpdatedEvent.subscribe((args) {
-      if (mounted) {
-        setState(() {
-          trustedDevices = ContactsScreen.trustedDevicePreferences
-                  ?.getStringList('trustedDevices') ??
-              [];
-        });
-      }
-    });
-  }
-
-  void _removeDeviceFromTrustedList(String deviceName) {
-    setState(
-      () {
-        trustedDevices.remove(deviceName);
-        ContactsScreen.trustedDevicePreferences
-            ?.setStringList('trustedDevices', trustedDevices.toList());
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Device removed from trusted list'),
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-                label: 'Undo',
-                onPressed: () {
-                  if (mounted) {
-                    setState(() {
-                      trustedDevices.add(deviceName);
-                      ContactsScreen.trustedDevicePreferences?.setStringList(
-                          'trustedDevices', trustedDevices.toList());
-                    });
-                  }
-                }),
-          ),
-        );
-      },
     );
   }
 
@@ -232,6 +152,195 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Save'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _subscribeToEvents() {
+    ClientEvents.usersUpdatedEvent.subscribe((args) {
+      if (mounted) {
+        setState(() {
+          trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('trustedDeviceMACs') ??
+              [];
+          trustedDeviceNames = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('trustedDeviceNames') ??
+              [];
+        });
+      }
+    });
+    LanServer.rejectEvent.subscribe((args) {
+      if (mounted) {
+        setState(() {
+          bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('bannedDeviceMACs') ??
+              [];
+          bannedDeviceNames = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('bannedDeviceNames') ??
+              [];
+        });
+      }
+    });
+  }
+
+  Expanded _trustedDevicesList() {
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: trustedDeviceMACs.length,
+          itemBuilder: (BuildContext context, int index) {
+            return Dismissible(
+              key: ValueKey(trustedDeviceMACs[index]),
+              direction: DismissDirection.startToEnd,
+              background: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.red,
+                ),
+                padding: const EdgeInsets.only(left: 16),
+                alignment: Alignment.centerLeft,
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              onDismissed: (direction) => _removeDeviceFromTrustedList(
+                  trustedDeviceMACs[index], trustedDeviceNames[index]),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                child: ListTile(
+                  title: Text(trustedDeviceNames[index]),
+                  subtitle: Text(trustedDeviceMACs[index]),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    // Handle the button tap event
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _removeDeviceFromTrustedList(String deviceMAC, String username) {
+    setState(
+      () {
+        trustedDeviceMACs.remove(deviceMAC);
+        ContactsScreen.trustedDevicePreferences
+            ?.setStringList('trustedDeviceMACs', trustedDeviceMACs);
+        trustedDeviceNames.remove(username);
+        ContactsScreen.trustedDevicePreferences
+            ?.setStringList('trustedDeviceNames', trustedDeviceNames);
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Device removed from trusted list'),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+                label: 'Undo',
+                onPressed: () {
+                  if (mounted) {
+                    setState(() {
+                      trustedDeviceMACs.add(deviceMAC);
+                      trustedDeviceNames.add(username);
+                      ContactsScreen.trustedDevicePreferences?.setStringList(
+                          'trustedDeviceMACs', trustedDeviceMACs);
+                      ContactsScreen.trustedDevicePreferences?.setStringList(
+                          'trustedDeviceNames', trustedDeviceNames);
+                    });
+                  }
+                }),
+          ),
+        );
+      },
+    );
+  }
+
+  _bannedDevicesList() {
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: bannedDeviceMACs.length,
+          itemBuilder: (BuildContext context, int index) {
+            return Dismissible(
+              key: ValueKey(bannedDeviceMACs[index]),
+              direction: DismissDirection.startToEnd,
+              background: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.lightBlue,
+                ),
+                padding: const EdgeInsets.only(left: 16),
+                alignment: Alignment.centerLeft,
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              onDismissed: (direction) => _removeDeviceFromBannedList(
+                  bannedDeviceMACs[index], bannedDeviceNames[index]),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                child: ListTile(
+                  title: Text(bannedDeviceNames[index]),
+                  subtitle: Text(bannedDeviceMACs[index]),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    // Handle the button tap event
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  _removeDeviceFromBannedList(String deviceMAC, String username) {
+    setState(
+      () {
+        bannedDeviceMACs.remove(deviceMAC);
+        ContactsScreen.trustedDevicePreferences
+            ?.setStringList('bannedDeviceMACs', bannedDeviceMACs);
+        bannedDeviceNames.remove(username);
+        ContactsScreen.trustedDevicePreferences
+            ?.setStringList('bannedDeviceNames', bannedDeviceNames);
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Device removed from banned list'),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+                label: 'Undo',
+                onPressed: () {
+                  if (mounted) {
+                    setState(() {
+                      bannedDeviceMACs.add(deviceMAC);
+                      bannedDeviceNames.add(username);
+                      ContactsScreen.trustedDevicePreferences
+                          ?.setStringList('bannedDeviceMACs', bannedDeviceMACs);
+                      ContactsScreen.trustedDevicePreferences?.setStringList(
+                          'bannedDeviceNames', bannedDeviceNames);
+                    });
+                  }
+                }),
+          ),
         );
       },
     );

@@ -3,6 +3,7 @@ class MessagingProtocol {
   static const broadcastMessage = 'bc';
   static const privateMessage = 'pv';
   static const trustedDevice = 'td';
+  static const bannedDevice = 'bd';
   static const logout = 'lo';
   static const nameUpdate = 'nu';
   static const becomeServer = 'bs';

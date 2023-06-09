@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:local_chat/network/client/client_events.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/chat_title.dart';
 import 'package:local_chat/screens/chat_screen/custom_widgets/message_box.dart';
+import 'package:local_chat/screens/chat_screen/custom_widgets/user_logged_out_dialog.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 import 'package:local_chat/utils/image_utils.dart';
 import '../../auth/user.dart';
@@ -87,6 +88,12 @@ class _ChatScreenState extends State<ChatScreen> {
           !widget.isGeneralChat) {
         if (mounted) {
           Navigator.pop(context);
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return const UserLoggedOutDialog();
+            },
+          );
         }
       }
     });

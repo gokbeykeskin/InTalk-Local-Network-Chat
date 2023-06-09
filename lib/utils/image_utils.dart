@@ -12,7 +12,7 @@ import '../screens/contacts_screen/contacts_screen.dart';
 class ImageUtils {
   static List<Uint8List> splitImage(Uint8List data) {
     final List<Uint8List> chunks = [];
-    const int chunkSize = 1024; //bunu arttırarak deney yap.
+    const int chunkSize = 512; //bunu arttırarak deney yap.
     int offset = 0;
     int remaining = data.length;
 
@@ -35,8 +35,8 @@ class ImageUtils {
   }
 
   static Future<File> compressImage(File file, String targetPath) async {
-    const int quality = 15;
-    var result = await FlutterImageCompress.compressAndGetFile(
+    const int quality = 10;
+    XFile? result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
       quality: quality,
@@ -44,9 +44,9 @@ class ImageUtils {
 
     if (kDebugMode) {
       print("Before compression:${file.lengthSync()}");
-      print("After compression:${result!.lengthSync()}");
+      print("After compression:${result!.length}");
     }
-    return result!;
+    return File(result!.path);
   }
 
   static User getUserByName(String name) {

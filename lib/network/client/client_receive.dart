@@ -50,7 +50,12 @@ class ClientReceive {
       if (kDebugMode) {
         print("Client: Trusted device ${split[1]} received.");
       }
-      handleTrustedDevice(split[1]);
+      handleTrustedDevice(split[1], split[2]);
+    } else if (split[0] == MessagingProtocol.bannedDevice) {
+      if (kDebugMode) {
+        print("Client: Banned device ${split[1]} received.");
+      }
+      handleBannedDevice(split[1], split[2]);
     } else if (split[0] == MessagingProtocol.logout) {
       if (kDebugMode) {
         print("Client: Logout received from ${split[1]}");
@@ -110,18 +115,42 @@ class ClientReceive {
       }
       ContactsScreen.loggedInUsers.add(User(
           macAddress: split[1], name: split[2], port: int.parse(split[3])));
+      _updateTrustedDeviceNames(split[1], split[2]);
       ClientEvents.usersUpdatedEvent.broadcast();
     }
   }
 
-  void handleTrustedDevice(String macAddress) {
-    List<String>? trustedDevices = ContactsScreen.trustedDevicePreferences
-        ?.getStringList('trustedDevices');
-    trustedDevices ??= [];
-    if (!trustedDevices.contains(macAddress)) {
-      trustedDevices.add(macAddress);
+  void handleTrustedDevice(String macAddress, String userName) {
+    List<String>? trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('trustedDeviceMACs');
+    trustedDeviceMACs ??= [];
+    List<String>? trustedDeviceNames = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('trustedDeviceNames');
+    trustedDeviceNames ??= [];
+    if (!trustedDeviceMACs.contains(macAddress)) {
+      trustedDeviceMACs.add(macAddress);
+      trustedDeviceNames.add(userName);
       ContactsScreen.trustedDevicePreferences
-          ?.setStringList('trustedDevices', trustedDevices);
+          ?.setStringList('trustedDeviceMACs', trustedDeviceMACs);
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('trustedDeviceNames', trustedDeviceNames);
+    }
+  }
+
+  void handleBannedDevice(String macAddress, String userName) {
+    List<String>? bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('bannedDeviceMACs');
+    bannedDeviceMACs ??= [];
+    List<String>? bannedDeviceNames = ContactsScreen.trustedDevicePreferences
+        ?.getStringList('bannedDeviceNames');
+    bannedDeviceNames ??= [];
+    if (!bannedDeviceMACs.contains(macAddress)) {
+      bannedDeviceMACs.add(macAddress);
+      bannedDeviceNames.add(userName);
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('bannedDeviceMACs', bannedDeviceMACs);
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('bannedDeviceNames', bannedDeviceNames);
     }
   }
 
@@ -178,13 +207,17 @@ class ClientReceive {
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
     } else if (split[0] == MessagingProtocol.broadcastImageContd) {
+      if (split[1].length % 4 > 0) {
+        if (kDebugMode) {
+          print("Base64 image corrupted, trying to fix it.");
+        }
+        split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
+      }
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 80));
       if (listEquals(
           ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        await Future.delayed(const Duration(milliseconds: 80));
-
         ClientEvents.broadcastMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
             senderMac: _currentImageSenderMac!,
@@ -202,6 +235,7 @@ class ClientReceive {
           NewMessageEventArgs(
             senderMac: _currentImageSenderMac!,
             message: 'Sent an image, but it was corrupted.',
+            imageBytes: _currentImageBytes,
             sender: ContactsScreen.loggedInUsers
                 .firstWhere(
                     (element) => element.macAddress == _currentImageSenderMac)
@@ -221,11 +255,18 @@ class ClientReceive {
       _currentImageSenderMac = split[1];
       _currentImageBytes.clear();
     } else if (split[0] == MessagingProtocol.privateImageContd) {
+      if (split[1].length % 4 > 0) {
+        if (kDebugMode) {
+          print("Base64 image corrupted, trying to fix it.");
+        }
+        split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
+      }
       _currentImageBytes.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
+      await Future.delayed(const Duration(milliseconds: 80));
+
       if (listEquals(
           ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        await Future.delayed(const Duration(milliseconds: 80));
         ClientEvents.privateMessageReceivedEvent.broadcast(
           NewMessageEventArgs(
             senderMac: _currentImageSenderMac!,
@@ -243,6 +284,7 @@ class ClientReceive {
           NewMessageEventArgs(
             senderMac: _currentImageSenderMac!,
             message: 'Sent an image, but it was corrupted.',
+            imageBytes: _currentImageBytes,
             sender: ContactsScreen.loggedInUsers
                 .firstWhere(
                     (element) => element.macAddress == _currentImageSenderMac)
@@ -259,10 +301,26 @@ class ClientReceive {
       if (kDebugMode) {
         print("Name update received from ${split[1]}");
       }
+      _updateTrustedDeviceNames(split[1], split[2]);
       ContactsScreen.loggedInUsers
           .firstWhere((element) => element.macAddress == split[1])
           .name = split[2];
       ClientEvents.usersUpdatedEvent.broadcast();
+    }
+  }
+
+  //when a user changes their name, update the name in the trusted device list.
+  void _updateTrustedDeviceNames(String mac, String name) {
+    List<String> trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
+            ?.getStringList('trustedDeviceMACs') ??
+        [];
+    List<String> trustedDeviceNames = ContactsScreen.trustedDevicePreferences
+            ?.getStringList('trustedDeviceNames') ??
+        [];
+    if (trustedDeviceMACs.contains(mac)) {
+      trustedDeviceNames[trustedDeviceMACs.indexOf(mac)] = name;
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('trustedDeviceNames', trustedDeviceNames);
     }
   }
 }

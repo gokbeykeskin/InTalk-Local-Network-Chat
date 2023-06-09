@@ -14,6 +14,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _validate = true;
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   void dispose() {
     _textFieldController.dispose();
     super.dispose();
@@ -23,39 +28,46 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const DefaultAppBar(),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(38.0, 0.0, 38.0, 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: <Widget>[
-            const Icon(Icons.lan_outlined, size: 250),
-            const SizedBox(height: 100),
-            const Text(
-              'InTalk',
-              style: TextStyle(
-                  fontSize: 60.0,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Lobster'),
-            ),
-            const SizedBox(
-              height: 24.0,
-            ),
-            SizedBox(
-              height: 150,
-              child: ElevatedButton(
-                  onPressed: () {
-                    showDialog(context: context, builder: (_) => nameInput());
-                  },
-                  child: const Text(
-                    'Connect',
-                    style: TextStyle(
-                        fontSize: 30.0,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Lobster'),
-                  )),
-            ),
-          ],
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(38.0, 0.0, 38.0, 0.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              const SizedBox(
+                height: 100.0,
+              ),
+              const Icon(Icons.lan_outlined, size: 250),
+              const SizedBox(
+                height: 100.0,
+              ),
+              const Text(
+                'InTalk',
+                style: TextStyle(
+                    fontSize: 60.0,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Lobster'),
+              ),
+              const SizedBox(
+                height: 24.0,
+              ),
+              SizedBox(
+                height: 150,
+                child: ElevatedButton(
+                    onPressed: () {
+                      showDialog(context: context, builder: (_) => nameInput());
+                    },
+                    child: const Text(
+                      'Connect',
+                      style: TextStyle(
+                          fontSize: 30.0,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Lobster'),
+                    )),
+              ),
+            ],
+          ),
         ),
       ),
     );

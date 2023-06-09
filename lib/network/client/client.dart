@@ -32,7 +32,7 @@ class LanClient {
   // A stream for receiving messages from the server
   Stream<String> get messageStream => messageStreamController.stream;
 
-  Future<void> init() async {
+  Future<void> start() async {
     _networkIpAdress = await LanUtils.getNetworkIPAdress();
 
     List<String> components = _networkIpAdress!.split('.');
@@ -94,12 +94,12 @@ class LanClient {
     checkConnectionPeriodically();
   }
 
-  Future<void> stop() async {
+  void stop() {
     connected = false;
     ClientEvents.stop();
     // Close the client socket to disconnect from the server
 
-    await socket?.close();
+    socket?.destroy();
   }
 
   //Potential Bug! Not tested enough.
@@ -108,14 +108,16 @@ class LanClient {
       if (connected) {
         try {
           Socket tempSock = await Socket.connect(socket!.address, 12345,
-              timeout: const Duration(milliseconds: 3000));
-          await tempSock.close();
+              timeout: const Duration(milliseconds: 8000));
+          tempSock.destroy();
         } catch (e) {
-          socket?.close();
+          if (kDebugMode) {
+            print("Periodic check (connection lost):$e");
+          }
           connected = false;
           timer.cancel();
           ClientEvents.connectionLostEvent.broadcast();
-        }
+        } finally {}
       }
     });
   }

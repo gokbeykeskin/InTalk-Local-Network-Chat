@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-class RejectedDialog extends StatelessWidget {
-  const RejectedDialog({super.key});
+class UserLoggedOutDialog extends StatelessWidget {
+  const UserLoggedOutDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Kicked"),
-      content: const Text("Contact Host Device to get access."),
+      title: const Text("The user you are talking to went offline."),
+      content: const Text("You are directed to main screen."),
       actions: [
         TextButton(
           child: const Text("OK"),

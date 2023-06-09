@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'select_photo_button.dart';
 
+//Displays a button to select a photo from the gallery or take a photo with the camera
 class SelectPhotoOptionsScreen extends StatelessWidget {
   final Function(ImageSource source) onTap;
   const SelectPhotoOptionsScreen({

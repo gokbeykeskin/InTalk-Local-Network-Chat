@@ -16,6 +16,7 @@ import '../../auth/user.dart';
 import '../../utils/image_utils.dart';
 import 'custom_widgets/contact.dart';
 
+//Broadcasted when host accepts or rejects a connection request.
 class UserAcceptanceEventArgs extends EventArgs {
   final bool accepted;
   UserAcceptanceEventArgs({required this.accepted});
@@ -30,6 +31,7 @@ class ContactsScreen extends StatefulWidget {
   //holds all the messages for each receiver.
   static Map<User, List<Message>> messages = {};
   static bool ongoingImageSend = false;
+  //broadcasted when host accepts or rejects a connection request.
   static Event userAcceptanceEvent = Event();
   static SharedPreferences? trustedDevicePreferences;
 
@@ -40,8 +42,8 @@ class ContactsScreen extends StatefulWidget {
 class _ContactsScreenState extends State<ContactsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  LanServer? server;
-  LanClient? client;
+  LanServer? _server;
+  LanClient? _client;
   String? _localPath;
 
   @override
@@ -72,8 +74,9 @@ class _ContactsScreenState extends State<ContactsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            server == null ? const Text('InTalk') : const Text('InTalk (HOST)'),
+        title: _server == null
+            ? const Text('InTalk')
+            : const Text('InTalk (HOST)'),
         actions: [
           IconButton(
             onPressed: () {
@@ -123,7 +126,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       child: ChatScreen(
         isGeneralChat: true,
         receiver: ContactsScreen.generalChatUser,
-        meClient: client!,
+        meClient: _client!,
       ),
     );
   }
@@ -142,7 +145,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                     return Contact(
                         name: user.name,
                         port: user.port!,
-                        client: client!,
+                        client: _client!,
                         index: index);
                   }),
             )
@@ -151,17 +154,22 @@ class _ContactsScreenState extends State<ContactsScreen>
   }
 
 //tries to connect to a server. If there is no server, it will establish a server and connect to it.
-//this is called on a new login and it is the generic case.
+//this is called on a new login.
   void _handleServerClientConnections() async {
-    client = LanClient(user: User(name: widget.name));
-    await client?.start();
-    await tryConnections(client!);
-    if (client!.connected) return;
+    //create a client and try to connect each ip in the subnet.
+    _client = LanClient(user: User(name: widget.name));
+    await _client?.start();
+    await tryConnections(_client!);
+    //if the connection is successful, job is done. Simply return.
+    if (_client!.connected) return;
+
+    //if there is no server, try to become both a server and a client
+    //if this also fails, the most likely reason is that there is no LAN connection.
+    //In this case, show a dialog and return.
     try {
-      //if there is no server, become both a server and a client
-      server = LanServer(myUser: client!.user);
-      await server?.start();
-      client?.connect(-1); //connect to your own ip.
+      _server = LanServer(myUser: _client!.user);
+      await _server?.start();
+      _client?.connect(-1); //connect to your own ip.
       if (kDebugMode) {
         print('Server started');
       }
@@ -175,32 +183,39 @@ class _ContactsScreenState extends State<ContactsScreen>
     }
   }
 
+  //When server logs out and you are the first
+  //candidate to become the new server, this method is called.
   void _becomeServer() async {
     if (mounted) {
       setState(() {
         ContactsScreen.loggedInUsers.clear();
       });
     }
-    client = LanClient(user: User(name: widget.name));
-    await client?.start();
+    _client = LanClient(user: User(name: widget.name));
+    await _client?.start();
 
-    server = LanServer(myUser: client!.user);
-    await server?.start();
-    client?.connect(-1);
+    _server = LanServer(myUser: _client!.user);
+    await _server?.start();
+    _client?.connect(-1);
   }
 
+  //When server logs out and you are not the first candidate to become the
+  //new server, this method is called.
   void _connectToNewServer() async {
+    //Give the server some time to start.
+    await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) {
       setState(() {
         ContactsScreen.loggedInUsers.clear();
       });
     }
-    client = LanClient(user: User(name: widget.name));
-    await client?.start();
+    _client = LanClient(user: User(name: widget.name));
+    await _client?.start();
 
-    await tryConnections(client!);
+    await tryConnections(_client!);
   }
 
+  //tries to connect to each ip in the subnet.
   Future<void> tryConnections(LanClient client) async {
     List<Future<void>> connectFutures = [];
     for (int i = 0; i < 256; i++) {
@@ -211,19 +226,25 @@ class _ContactsScreenState extends State<ContactsScreen>
     return;
   }
 
+  //stops the server and client.
   void _logout() async {
     ContactsScreen.loggedInUsers.clear();
     ClientEvents.connectionLostEvent.unsubscribeAll();
-    if (server != null) {
-      await server?.stop();
+    if (_server != null) {
+      await _server?.stop();
+      _server = null;
     } else {
       if (kDebugMode) {
         print("There is no server instance to stop.");
       }
     }
-    client?.stop();
+    _client?.stop();
   }
 
+  //Most of the job is done in the ContactScreen because it is the one that
+  //comes after the login page and before all other screens.
+  //So it can pass anything to those screens. That's why there are lots of
+  //event listeners in this screen.
   void _subscribeToEvents() {
     //Every time someone updates the list of users, state will be set in order to update the UI.
     ClientEvents.usersUpdatedEvent.subscribe((args) {
@@ -286,6 +307,8 @@ class _ContactsScreenState extends State<ContactsScreen>
               image: file));
     });
 
+    //When a new device wants to connect, this event is broadcasted.
+    //args are the mac address and the name of the device.
     LanServer.authEvent.subscribe(
       (args) {
         args as AuthEventArgs;
@@ -299,7 +322,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         }
       },
     );
-
+    //When you are rejected by the host, this event is broadcasted.
     ClientEvents.rejectedEvent.subscribe((args) {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (context) => const HomeScreen()));
@@ -310,7 +333,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         },
       );
     });
-
+    // No LAN connection
     ClientEvents.connectionLostEvent.subscribe((args) {
       if (kDebugMode) {
         print("Connection lost.");
@@ -319,13 +342,15 @@ class _ContactsScreenState extends State<ContactsScreen>
         _noConnection();
       }
     });
+    //You changed your name in the settings screen.
     SettingsScreen.nameChangedEvent.subscribe((args) {
       args as NameChangedEventArgs;
       widget.name = args.name;
-      client?.clientTransmit.changeName(args.name);
+      _client?.clientTransmit.changeName(args.name);
     });
   }
 
+  //When there is no LAN connection, this method is called.
   void _noConnection() {
     Navigator.pushReplacement(
         context, MaterialPageRoute(builder: (context) => const HomeScreen()));

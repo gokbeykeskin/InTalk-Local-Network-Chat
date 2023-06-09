@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:photo_view/photo_view.dart';
 
+// Displays an image in full screen, you can zoom in and out and save the image to the gallery
 class FullScreenImage extends StatefulWidget {
   final File imageFile;
 

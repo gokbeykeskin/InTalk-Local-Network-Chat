@@ -9,6 +9,7 @@ class NameChangedEventArgs extends EventArgs {
   NameChangedEventArgs({required this.name});
 }
 
+// Change name, list and manage trusted devices and banned devices
 //ignore: must_be_immutable
 class SettingsScreen extends StatefulWidget {
   String username;

@@ -110,6 +110,10 @@ class ClientReceiver {
       clientSideEncryption.generateFinalKey(BigInt.parse(split[1]), split[2]);
     } else if (split[0] == MessagingProtocol.clientNumber) {
       clientNum = int.parse(split[1]);
+      print("My Client Number: ${clientNum}");
+    } else if (split[0] == MessagingProtocol.decreaseClientNumber) {
+      clientNum -= 1;
+      print("Decrease Number, My New Client Number: ${clientNum}");
     }
   }
 

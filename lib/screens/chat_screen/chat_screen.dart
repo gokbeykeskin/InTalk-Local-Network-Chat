@@ -90,7 +90,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     }
-    //if the person you are chatting logs out, pop to main window.
+    //if the person you are chatting logs out, pop to main window and show a dialog. (only for private chats)
     ClientEvents.usersUpdatedEvent.subscribe((args) {
       if (!ContactsScreen.loggedInUsers
               .any((user) => user.port == widget.receiver.port) &&
@@ -154,7 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-//consists of message typing and send image button
+//consists of message typing field and send image button
   _createBottomChatArea() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 35),

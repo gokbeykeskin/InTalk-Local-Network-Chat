@@ -18,7 +18,7 @@ class ClientSideEncryption extends BaseEncryption {
   //This is the initialization vector that is used to encrypt and decrypt messages
   late IV iv;
   //This is the encrypter that is used to encrypt and decrypt messages
-  late Encrypter encrypter;
+  Encrypter? encrypter;
 
   ClientSideEncryption() : myNumber = BigInt.from(Random().nextInt(4294967296));
   //This is created by the client and sent to client on heartbeat.
@@ -44,15 +44,15 @@ class ClientSideEncryption extends BaseEncryption {
 
   @override
   String encrypt(Socket? socket, String plainText) {
-    final encrypted = encrypter.encrypt(plainText, iv: iv);
+    final encrypted = encrypter?.encrypt(plainText, iv: iv);
 
-    return encrypted.base64;
+    return encrypted!.base64;
   }
 
   @override
   String decrypt(Socket? socket, String cipherText) {
     final encrypted = Encrypted.fromBase64(cipherText);
-    final decrypted = encrypter.decrypt(encrypted, iv: iv);
+    final decrypted = encrypter!.decrypt(encrypted, iv: iv);
     return decrypted;
   }
 }

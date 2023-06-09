@@ -4,6 +4,7 @@ import 'package:local_chat/network/client/client.dart';
 import '../../chat_screen/chat_screen.dart';
 import '../contacts_screen.dart';
 
+// A contact tile in the contacts screen
 class Contact extends StatelessWidget {
   final String name;
   final int port;

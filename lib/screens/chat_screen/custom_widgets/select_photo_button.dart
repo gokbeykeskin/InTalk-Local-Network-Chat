@@ -1,6 +1,6 @@
-
 import 'package:flutter/material.dart';
 
+// Button to select a photo from the gallery or take a picture
 class SelectPhoto extends StatelessWidget {
   final String textLabel;
   final IconData icon;
@@ -30,7 +30,6 @@ class SelectPhoto extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          // crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Icon(
               icon,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../auth/user.dart';
 
+// Displays the name of the user that the client is chatting with
 class ChatTitle extends StatelessWidget {
   const ChatTitle({super.key, required this.toChatUser});
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// Displays a dialog when the user you are chatting logs out
 class UserLoggedOutDialog extends StatelessWidget {
   const UserLoggedOutDialog({super.key});
 

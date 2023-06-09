@@ -14,7 +14,7 @@ import '../../utils/lan_utils.dart';
 
 class LanClient {
   User user;
-  late Socket socket;
+  Socket? socket;
   bool connected = false;
 
   late String _networkIpAdress;
@@ -70,7 +70,7 @@ class LanClient {
     try {
       socket = await Socket.connect(ipAddress, 12345,
           timeout: const Duration(milliseconds: 2000));
-      user.port = socket.port;
+      user.port = socket?.port;
       connected = true;
       if (kDebugMode) {
         print('Successfully connected to the server: $ipAddress:12345');
@@ -82,14 +82,16 @@ class LanClient {
       }
     }
     clientTransmit = ClientTransmit(
-        user: user, socket: socket, clientSideEncryption: clientSideEncryption);
+        user: user,
+        socket: socket!,
+        clientSideEncryption: clientSideEncryption);
     _clientReceive =
         ClientReceiver(user: user, clientSideEncryption: clientSideEncryption);
     _intermediateKey = clientSideEncryption.generateIntermediateKey();
     clientTransmit.sendOpenMessage(
-        "${MessagingProtocol.login}‽${user.macAddress}‽${user.name}‽${socket.port}‽$_intermediateKey");
+        "${MessagingProtocol.login}‽${user.macAddress}‽${user.name}‽${socket!.port}‽$_intermediateKey");
     // Listen for incoming messages from the server
-    socket.listen((data) {
+    socket!.listen((data) {
       // Convert the incoming data to a string
       var message = utf8.decode(data).trim();
       _messageStreamController.add(message);
@@ -111,7 +113,7 @@ class LanClient {
     connected = false;
     ClientEvents.stop();
     // Close the client socket to disconnect from the server
-    socket.destroy();
+    socket?.destroy();
     _messageStreamController.close();
   }
 
@@ -120,17 +122,23 @@ class LanClient {
     Timer.periodic(const Duration(seconds: 10), (Timer timer) async {
       if (connected) {
         try {
-          Socket tempSock = await Socket.connect(socket.address, 12345,
+          Socket tempSock = await Socket.connect(socket!.address, 12345,
               timeout: const Duration(milliseconds: 8000));
           tempSock.destroy();
         } catch (e) {
           if (kDebugMode) {
             print("Periodic check (connection lost):$e");
           }
-          connected = false;
-          timer.cancel();
-          ClientEvents.connectionLostEvent.broadcast();
-        } finally {}
+          if (e.toString().contains("Too many open files")) {
+            //File limit is exceeded, give garbage collector some time to clean up
+            await Future.delayed(const Duration(seconds: 10));
+          } else {
+            //Connection is lost
+            connected = false;
+            timer.cancel();
+            ClientEvents.connectionLostEvent.broadcast();
+          }
+        }
       }
     });
   }

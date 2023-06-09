@@ -28,9 +28,9 @@ class CustomStreamController {
 
 class LanServer {
   // server socket that listens for incoming client connections
-  late ServerSocket _serverSocket;
-  // A list of connected sockets
-  final List<Socket> _connectedSockets = [];
+  ServerSocket? _serverSocket;
+  // A map of connected sockets and client numbers.
+  final Map<Socket, int> _connectedClients = {};
   //the user which logged in from this device.
   final User _myUser;
   LanServer({required User myUser}) : _myUser = myUser;
@@ -71,8 +71,9 @@ class LanServer {
     // Create a server socket that listens for incoming client connections
     _serverSocket = await ServerSocket.bind(ipAddress, 12345, shared: true);
     // Listen for incoming client connections
-    _serverSocket.listen((socket) {
-      _connectedSockets.add(socket);
+    _serverSocket?.listen((socket) {
+      _connectedClients[socket] = _connectedClients.length - 1;
+      print("Connected Clients: ${_connectedClients.length}");
 
       // Add the socket to the list of connected sockets
       _messageStreamControllers.add(CustomStreamController(socket: socket));
@@ -92,16 +93,26 @@ class LanServer {
       }, onDone: () {
         //when a client closes a socket
         // Remove the socket from the list of connected sockets
-        _connectedSockets.remove(socket);
         //send the logout message to all clients
         try {
-          _sendMessageToAll('${MessagingProtocol.logout}‽${socket.remotePort}');
+          _sendMessageToAllExcept(
+              '${MessagingProtocol.logout}‽${socket.remotePort}', socket);
+          for (var connectedSocket in _connectedClients.keys) {
+            if (_connectedClients[connectedSocket]! >
+                _connectedClients[socket]!) {
+              _connectedClients[connectedSocket] =
+                  _connectedClients[connectedSocket]! - 1;
+              _sendMessage(
+                  MessagingProtocol.decreaseClientNumber, connectedSocket);
+            }
+          }
         } catch (e) {
           if (kDebugMode) {
             print(
                 "Server was the logged out client. No need to send logout message to other clients");
           }
         }
+        _connectedClients.remove(socket);
       });
     });
   }
@@ -115,15 +126,14 @@ class LanServer {
     rejectEvent.unsubscribeAll();
 
     // Close the server socket to stop accepting new client connections
-    await _serverSocket.close();
+    await _serverSocket?.close();
 
-    List<Future<void>> socketFutures = [];
+    //List<Future<void>> socketFutures = [];
     // Close all existing client connections
-    for (var clientSocket in _connectedSockets) {
-      socketFutures.add(clientSocket.close());
+    for (var clientSocket in _connectedClients.keys.toList()) {
+      clientSocket.destroy();
     }
-    await Future.wait(socketFutures);
-    _connectedSockets.clear();
+    _connectedClients.clear();
     for (var element in _messageStreamControllers) {
       element._messageStreamController.close();
     }
@@ -133,13 +143,13 @@ class LanServer {
   // Send a message to all connected clients
   void _sendMessageToAll(String message) {
     // Send the message to all connected sockets
-    for (var socket in _connectedSockets) {
+    for (var socket in _connectedClients.keys) {
       _sendMessage(message, socket);
     }
   }
 
   void _sendMessageToAllExcept(String message, Socket socket) {
-    for (var s in _connectedSockets) {
+    for (var s in _connectedClients.keys) {
       if (s != socket) {
         _sendMessage(message, s);
       }
@@ -158,7 +168,7 @@ class LanServer {
   }
 
   void _sendMessageToPort(String message, int port) {
-    Socket socket = _connectedSockets.firstWhere((element) {
+    Socket socket = _connectedClients.keys.firstWhere((element) {
       return element.remotePort == port;
     });
     _sendMessage(message, socket);
@@ -285,23 +295,27 @@ class LanServer {
     //Assign a client number to the new client. This number is used to choose
     // next server candidate when host device is disconnected.
     _sendMessage(
-        '${MessagingProtocol.clientNumber}‽${_connectedSockets.length - 1}',
+        '${MessagingProtocol.clientNumber}‽${_connectedClients.length - 1}',
         socket);
   }
 
+  // General message, send it to all clients except the sender
   void _processBroadcastMessage(String message, Socket socket) {
     _sendMessageToAllExcept(message, socket);
   }
 
+  // Private message, send it to the specified client
   void _processPrivateMessage(String message, Socket socket) {
     var split = message.split("‽");
     _sendMessageToPort(message, int.parse(split[2]));
   }
 
+  // Part of a broadcast image, send it to all clients except the sender
   void _processBroadcastImage(String message, Socket socket) {
     _sendMessageToAllExcept(message, socket);
   }
 
+  //Part of a private image, send it to the specified client
   void _processPrivateImage(String message, Socket socket) {
     var split = message.split("‽");
     if (split[0] == MessagingProtocol.privateImageStart) {
@@ -311,13 +325,15 @@ class LanServer {
     }
   }
 
+  // Someone changed their name, send it to all clients except the changer
   void _processNameUpdate(String message, Socket socket) {
     _sendMessageToAllExcept(message, socket);
   }
 
+  //User rejected the new client, kick it.
   void _kickUser(Socket socket) {
     _isUserAccepted = null;
     socket.destroy();
-    _connectedSockets.remove(socket);
+    _connectedClients.remove(socket);
   }
 }

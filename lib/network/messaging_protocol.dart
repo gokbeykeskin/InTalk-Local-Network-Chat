@@ -1,3 +1,4 @@
+// The messaging protocol used by the server and client.
 class MessagingProtocol {
   static const login = 'hb';
   static const broadcastMessage = 'bc';
@@ -17,4 +18,5 @@ class MessagingProtocol {
   static const clientNumber = 'cn';
   static const removedTrustedDevice = 'rt';
   static const removedBannedDevice = 'rb';
+  static const decreaseClientNumber = 'dc';
 }

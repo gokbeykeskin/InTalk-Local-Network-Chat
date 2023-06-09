@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'fullscreen_image.dart';
 
+// Displays a message in a card
 class MessageBox extends StatelessWidget {
   final String sender;
   final String message;

@@ -239,11 +239,9 @@ class _ContactsScreenState extends State<ContactsScreen>
       }
     });
     ClientEvents.becomeServerEvent.subscribe((args) {
-      print("AAAA");
       _becomeServer();
     });
     ClientEvents.connectToNewServerEvent.subscribe((args) {
-      print("BBBB");
       _connectToNewServer();
     });
 
@@ -302,18 +300,15 @@ class _ContactsScreenState extends State<ContactsScreen>
       },
     );
 
-    ClientEvents.acceptanceEvent.subscribe((args) {
-      args as AcceptanceEventArgs;
-      if (args.accepted == false) {
-        Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()));
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return const RejectedDialog();
-          },
-        );
-      }
+    ClientEvents.rejectedEvent.subscribe((args) {
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return const RejectedDialog();
+        },
+      );
     });
 
     ClientEvents.connectionLostEvent.subscribe((args) {

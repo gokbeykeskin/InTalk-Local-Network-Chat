@@ -43,9 +43,18 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   List<Message> messages = [];
   final textFieldController = TextEditingController();
+  late ScaffoldMessengerState _scaffoldMessengerState;
+
+  @override
+  void didChangeDependencies() {
+    _scaffoldMessengerState = ScaffoldMessenger.of(context);
+    super.didChangeDependencies();
+  }
 
   @override
   void dispose() {
+    _scaffoldMessengerState.clearSnackBars();
+    ContactsScreen.ongoingImageSend = false;
     super.dispose();
     textFieldController.dispose();
   }

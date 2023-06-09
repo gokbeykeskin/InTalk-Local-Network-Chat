@@ -1,5 +1,5 @@
 class MessagingProtocol {
-  static const heartbeat = 'hb';
+  static const login = 'hb';
   static const broadcastMessage = 'bc';
   static const privateMessage = 'pv';
   static const trustedDevice = 'td';

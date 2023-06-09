@@ -14,18 +14,20 @@ class NewMessageEventArgs extends EventArgs {
       this.imageBytes});
 }
 
-class AcceptanceEventArgs extends EventArgs {
-  bool accepted;
-  AcceptanceEventArgs({required this.accepted});
-}
-
 class ClientEvents {
+  //When a new broadcast message is received
   static var broadcastMessageReceivedEvent = Event();
+  //When a new private message is received
   static var privateMessageReceivedEvent = Event();
+  //When a logout or login occurs
   static var usersUpdatedEvent = Event();
+  //When server exits and you are the first candidate to become the new server
   static var becomeServerEvent = Event();
+  //When server exits and you are not the first candidate to become the new server
   static var connectToNewServerEvent = Event();
-  static var acceptanceEvent = Event();
+  //When you try to connect but host rejects you
+  static var rejectedEvent = Event();
+  //When you lose connection to LAN
   static var connectionLostEvent = Event();
 
   static void stop() {
@@ -34,7 +36,7 @@ class ClientEvents {
     connectToNewServerEvent.unsubscribeAll();
     broadcastMessageReceivedEvent.unsubscribeAll();
     privateMessageReceivedEvent.unsubscribeAll();
-    acceptanceEvent.unsubscribeAll();
+    rejectedEvent.unsubscribeAll();
     connectionLostEvent.unsubscribeAll();
   }
 }

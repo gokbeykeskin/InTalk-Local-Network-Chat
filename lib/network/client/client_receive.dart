@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:local_chat/encrypt/encryption.dart';
 
 import '../../auth/user.dart';
+import '../../encrypt/client_encryption.dart';
 import '../../screens/contacts_screen/contacts_screen.dart';
 import '../../utils/image_utils.dart';
 import '../messaging_protocol.dart';
@@ -15,17 +15,21 @@ class ImageSender {
   ImageSender({required this.senderMac, required this.imageBytes});
 }
 
-class ClientReceive {
+//Handles all the messages received by the server
+class ClientReceiver {
+  //for handling access point transfers. When server quits 1st client becomes server
+  //and the rest of the clients connect to the new server.
   late int clientNum;
-  ClientSideEncryption clientSideEncryption;
-  User user;
+  final ClientSideEncryption clientSideEncryption;
+  //Your information.
+  final User user;
 
-  ClientReceive({required this.user, required this.clientSideEncryption});
+  ClientReceiver({required this.user, required this.clientSideEncryption});
 
-  //final List<int> _currentImageBytes = [];
-  //String? _currentImageSenderMac;
-  //mac-imageBytes map
-  Map<String, List<int>> _currentImageSenders = {};
+  //MAC-Image bytes
+  //This is used to keep track of the image bytes received from each client since
+  //the image bytes are received in chunks.
+  final Map<String, List<int>> _currentImageSenders = {};
   // Messages are received in the following format
   // message1_identifier‽message1_data◊message2_identifier‽message2_data◊message3_identifier‽message3_data
   // This function parses the messages and calls handler
@@ -34,70 +38,71 @@ class ClientReceive {
       var split = message.split('◊');
       for (var i = 0; i < split.length; i++) {
         if (split[i] != "") {
-          handleMessage(split[i]);
+          _handleMessage(split[i]);
         }
       }
     }
   }
 
   //Splits the message and calls the appropriate handler
-  void handleMessage(String message) {
+  void _handleMessage(String message) {
     var split = message.split("‽");
 
+    //All the messages except the server intermediate key are encrypted
+    //So we need to decrypt them before handling them.
     if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
       message = clientSideEncryption.decrypt(null, message);
       split = message.split("‽");
     }
 
-    if (split[0] == MessagingProtocol.heartbeat) {
+    if (split[0] == MessagingProtocol.login) {
       if (kDebugMode) {
-        print("Client: Heartbeat received from ${split[2]}");
+        print("Client: Login received from ${split[2]}");
       }
-      handleHeartbeat(split);
+      _handleLogin(split);
     } else if (split[0] == MessagingProtocol.trustedDevice) {
       if (kDebugMode) {
         print("Client: Trusted device ${split[1]} received.");
       }
-      handleTrustedDevice(split[1], split[2]);
+      _handleTrustedDevice(split[1], split[2]);
     } else if (split[0] == MessagingProtocol.bannedDevice) {
       if (kDebugMode) {
         print("Client: Banned device ${split[1]} received.");
       }
-      handleBannedDevice(split[1], split[2]);
+      _handleBannedDevice(split[1], split[2]);
     } else if (split[0] == MessagingProtocol.logout) {
       if (kDebugMode) {
         print("Client: Logout received from ${split[1]}");
       }
-      handleLogout(split);
+      _handleLogout(split);
     } else if (split[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Client: Broadcast message received from ${split[1]}");
       }
-      handleBroadcastMessage(split);
+      _handleBroadcastMessage(split);
     } else if (split[0] == MessagingProtocol.privateMessage) {
       if (kDebugMode) {
         print("Client: Private message received from ${split[1]}");
       }
-      handlePrivateMessage(split);
+      _handlePrivateMessage(split);
     } else if (split[0] == MessagingProtocol.broadcastImageStart ||
         split[0] == MessagingProtocol.broadcastImageContd ||
         split[0] == MessagingProtocol.broadcastImageEnd) {
-      handleBroadcastImage(split);
+      _handleBroadcastImage(split);
     } else if (split[0] == MessagingProtocol.privateImageStart ||
         split[0] == MessagingProtocol.privateImageContd ||
         split[0] == MessagingProtocol.privateImageEnd) {
-      handlePrivateImage(split);
+      _handlePrivateImage(split);
     } else if (split[0] == MessagingProtocol.nameUpdate) {
       if (kDebugMode) {
         print("Client: Name update received from ${split[1]}");
       }
-      handleNameUpdate(split);
+      _handleNameUpdate(split);
     } else if (split[0] == MessagingProtocol.rejected) {
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
-      ClientEvents.acceptanceEvent
-          .broadcast(AcceptanceEventArgs(accepted: false));
+      ClientEvents.rejectedEvent.broadcast();
     } else if (split[0] == MessagingProtocol.serverIntermediateKey) {
       if (kDebugMode) {
         print("Client: Server intermediate key received.");
@@ -108,7 +113,7 @@ class ClientReceive {
     }
   }
 
-  void handleHeartbeat(List<String> split) {
+  void _handleLogin(List<String> split) {
     if (split[1] != user.macAddress) {
       if (kDebugMode) {
         print("New user added: ${split[2]}");
@@ -120,7 +125,7 @@ class ClientReceive {
     }
   }
 
-  void handleTrustedDevice(String macAddress, String userName) {
+  void _handleTrustedDevice(String macAddress, String userName) {
     List<String>? trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
         ?.getStringList('trustedDeviceMACs');
     trustedDeviceMACs ??= [];
@@ -137,7 +142,7 @@ class ClientReceive {
     }
   }
 
-  void handleBannedDevice(String macAddress, String userName) {
+  void _handleBannedDevice(String macAddress, String userName) {
     List<String>? bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
         ?.getStringList('bannedDeviceMACs');
     bannedDeviceMACs ??= [];
@@ -155,7 +160,7 @@ class ClientReceive {
   }
 
 //handle when some other client logs out
-  void handleLogout(List<String> split) {
+  void _handleLogout(List<String> split) {
     if (kDebugMode) {
       print("User logged out: ${split[1]}");
     }
@@ -164,7 +169,7 @@ class ClientReceive {
     ClientEvents.usersUpdatedEvent.broadcast();
   }
 
-  void handleBroadcastMessage(List<String> split) async {
+  void _handleBroadcastMessage(List<String> split) async {
     if (split[1] != user.macAddress) {
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
@@ -179,7 +184,7 @@ class ClientReceive {
     }
   }
 
-  void handlePrivateMessage(List<String> split) async {
+  void _handlePrivateMessage(List<String> split) async {
     ClientEvents.privateMessageReceivedEvent.broadcast(
       NewMessageEventArgs(
           senderMac: split[1],
@@ -191,7 +196,7 @@ class ClientReceive {
     );
   }
 
-  void handleBroadcastImage(List<String> split) async {
+  void _handleBroadcastImage(List<String> split) async {
     if (split[0] == MessagingProtocol.broadcastImageStart) {
       if (kDebugMode) {
         print("Broadcast image received from ${split[1]}");
@@ -228,7 +233,7 @@ class ClientReceive {
     }
   }
 
-  void handlePrivateImage(List<String> split) async {
+  void _handlePrivateImage(List<String> split) async {
     if (split[0] == MessagingProtocol.privateImageStart) {
       if (kDebugMode) {
         print("Private image received from ${split[1]}");
@@ -247,7 +252,7 @@ class ClientReceive {
 
       ClientEvents.privateMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
-          senderMac: split[2]!,
+          senderMac: split[2],
           message: listEquals(
                   ImageUtils.hashImage(_currentImageSenders[split[2]]!),
                   base64Decode(split[1]))
@@ -264,7 +269,7 @@ class ClientReceive {
     }
   }
 
-  void handleNameUpdate(List<String> split) {
+  void _handleNameUpdate(List<String> split) {
     if (split[1] != user.macAddress) {
       if (kDebugMode) {
         print("Name update received from ${split[1]}");

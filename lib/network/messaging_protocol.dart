@@ -6,8 +6,6 @@ class MessagingProtocol {
   static const bannedDevice = 'bd';
   static const logout = 'lo';
   static const nameUpdate = 'nu';
-  static const becomeServer = 'bs';
-  static const connectToNewServer = 'cs';
   static const broadcastImageStart = 'bi';
   static const broadcastImageContd = 'cb';
   static const broadcastImageEnd = 'eb';
@@ -16,4 +14,7 @@ class MessagingProtocol {
   static const privateImageEnd = 'ei';
   static const rejected = 'rj';
   static const serverIntermediateKey = 'sk';
+  static const clientNumber = 'cn';
+  static const removedTrustedDevice = 'rt';
+  static const removedBannedDevice = 'rb';
 }

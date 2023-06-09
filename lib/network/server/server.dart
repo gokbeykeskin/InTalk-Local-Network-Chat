@@ -72,13 +72,14 @@ class LanServer {
     serverSocket = await ServerSocket.bind(ipAddress, 12345, shared: true);
     // Listen for incoming client connections
     serverSocket?.listen((socket) {
+      connectedSockets.add(socket);
+
       // Add the socket to the list of connected sockets
       messageStreamControllers.add(CustomStreamController(socket: socket));
 
       messageStreamControllers.last.messageStream.listen((message) {
         _parseMessages(message, socket);
       });
-      connectedSockets.add(socket);
       // Listen for incoming messages from the client
       socket.listen((data) {
         // Convert the incoming data to a string
@@ -112,18 +113,6 @@ class LanServer {
     }
     authEvent.unsubscribeAll();
     rejectEvent.unsubscribeAll();
-    if (connectedSockets.length > 1) {
-      if (kDebugMode) {
-        print("Transfering the server");
-      }
-      //if there is another client which can become server
-      _sendMessage(MessagingProtocol.becomeServer, connectedSockets[1]);
-      //give time to first client to establish access point
-      Future.delayed(const Duration(milliseconds: 200));
-      for (var i = 2; i < connectedSockets.length; i++) {
-        _sendMessage(MessagingProtocol.connectToNewServer, connectedSockets[i]);
-      }
-    }
 
     // Close the server socket to stop accepting new client connections
     await serverSocket?.close();
@@ -288,6 +277,9 @@ class LanServer {
           '${MessagingProtocol.bannedDevice}‽$bannedDeviceMAC‽${bannedDeviceNames[i++]}',
           socket);
     }
+    _sendMessage(
+        '${MessagingProtocol.clientNumber}‽${connectedSockets.length - 1}',
+        socket);
   }
 
   void _processBroadcastMessage(String message, Socket socket) {

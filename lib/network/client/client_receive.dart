@@ -10,6 +10,7 @@ import '../messaging_protocol.dart';
 import 'client_events.dart';
 
 class ClientReceive {
+  late int clientNum;
   ClientSideEncryption clientSideEncryption;
   User user;
 
@@ -61,16 +62,6 @@ class ClientReceive {
         print("Client: Logout received from ${split[1]}");
       }
       handleLogout(split);
-    } else if (split[0] == MessagingProtocol.becomeServer) {
-      if (kDebugMode) {
-        print("Client: Become server received from server");
-      }
-      handleBecomeServer(split);
-    } else if (split[0] == MessagingProtocol.connectToNewServer) {
-      if (kDebugMode) {
-        print("Client: Connect to new server received from server");
-      }
-      handleConnectToNewServer(split);
     } else if (split[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Client: Broadcast message received from ${split[1]}");
@@ -105,6 +96,8 @@ class ClientReceive {
         print("Client: Server intermediate key received.");
       }
       clientSideEncryption.generateFinalKey(BigInt.parse(split[1]), split[2]);
+    } else if (split[0] == MessagingProtocol.clientNumber) {
+      clientNum = int.parse(split[1]);
     }
   }
 
@@ -162,14 +155,6 @@ class ClientReceive {
     ContactsScreen.loggedInUsers
         .removeWhere((element) => element.port.toString() == split[1]);
     ClientEvents.usersUpdatedEvent.broadcast();
-  }
-
-  void handleBecomeServer(List<String> split) {
-    ClientEvents.becomeServerEvent.broadcast();
-  }
-
-  void handleConnectToNewServer(List<String> split) {
-    ClientEvents.connectToNewServerEvent.broadcast();
   }
 
   void handleBroadcastMessage(List<String> split) async {

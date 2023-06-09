@@ -89,6 +89,13 @@ class LanClient {
       // Convert the incoming data to a string
       var message = utf8.decode(data).trim();
       messageStreamController.add(message);
+    }).onDone(() {
+      clientReceive.clientNum -= 1;
+      if (clientReceive.clientNum == 0) {
+        ClientEvents.becomeServerEvent.broadcast();
+      } else {
+        ClientEvents.connectToNewServerEvent.broadcast();
+      }
     });
 
     checkConnectionPeriodically();

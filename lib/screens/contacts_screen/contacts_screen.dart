@@ -239,9 +239,11 @@ class _ContactsScreenState extends State<ContactsScreen>
       }
     });
     ClientEvents.becomeServerEvent.subscribe((args) {
+      print("AAAA");
       _becomeServer();
     });
     ClientEvents.connectToNewServerEvent.subscribe((args) {
+      print("BBBB");
       _connectToNewServer();
     });
 

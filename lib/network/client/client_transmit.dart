@@ -35,10 +35,10 @@ class ClientTransmit {
         const Duration(milliseconds: 50),
       ); //bu delay arttırılarak büyük resimlerdeki hata düzeltilebilir, ama büyük resimler zaten çok uzun sürüyor.
       sendMessage(
-          '${MessagingProtocol.broadcastImageContd}‽${base64Encode(bytes[i])}');
+          '${MessagingProtocol.broadcastImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}');
     }
     sendMessage(
-        '${MessagingProtocol.broadcastImageEnd}‽${base64Encode(hashedBytes)}');
+        '${MessagingProtocol.broadcastImageEnd}‽${base64Encode(hashedBytes)}‽${user.macAddress}');
   }
 
   Future<void> sendPrivateImage(Uint8List base64Image, User receiver) async {
@@ -51,10 +51,10 @@ class ClientTransmit {
         const Duration(milliseconds: 50),
       );
       sendMessage(
-          '${MessagingProtocol.privateImageContd}‽${base64Encode(bytes[i])}');
+          '${MessagingProtocol.privateImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}');
     }
     sendMessage(
-        '${MessagingProtocol.privateImageEnd}‽${base64Encode(hashedBytes)}');
+        '${MessagingProtocol.privateImageEnd}‽${base64Encode(hashedBytes)}‽${user.macAddress}');
   }
 
   void changeName(String newName) {

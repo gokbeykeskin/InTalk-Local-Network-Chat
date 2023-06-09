@@ -9,6 +9,12 @@ import '../../utils/image_utils.dart';
 import '../messaging_protocol.dart';
 import 'client_events.dart';
 
+class ImageSender {
+  final String senderMac;
+  final List<int> imageBytes;
+  ImageSender({required this.senderMac, required this.imageBytes});
+}
+
 class ClientReceive {
   late int clientNum;
   ClientSideEncryption clientSideEncryption;
@@ -16,9 +22,10 @@ class ClientReceive {
 
   ClientReceive({required this.user, required this.clientSideEncryption});
 
-  final List<int> _currentImageBytes = [];
-  String? _currentImageSenderMac;
-
+  //final List<int> _currentImageBytes = [];
+  //String? _currentImageSenderMac;
+  //mac-imageBytes map
+  Map<String, List<int>> _currentImageSenders = {};
   // Messages are received in the following format
   // message1_identifier‽message1_data◊message2_identifier‽message2_data◊message3_identifier‽message3_data
   // This function parses the messages and calls handler
@@ -189,8 +196,7 @@ class ClientReceive {
       if (kDebugMode) {
         print("Broadcast image received from ${split[1]}");
       }
-      _currentImageSenderMac = split[1];
-      _currentImageBytes.clear();
+      _currentImageSenders[split[1]] = [];
     } else if (split[0] == MessagingProtocol.broadcastImageContd) {
       if (split[1].length % 4 > 0) {
         if (kDebugMode) {
@@ -198,37 +204,27 @@ class ClientReceive {
         }
         split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
       }
-      _currentImageBytes.addAll(base64Decode(split[1]));
+      //add incoming image bytes to senders list
+      _currentImageSenders[split[2]]!.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
       await Future.delayed(const Duration(milliseconds: 80));
-      if (listEquals(
-          ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        ClientEvents.broadcastMessageReceivedEvent.broadcast(
-          NewMessageEventArgs(
-            senderMac: _currentImageSenderMac!,
-            message: '',
-            imageBytes: _currentImageBytes,
-            sender: ContactsScreen.loggedInUsers
-                .firstWhere(
-                    (element) => element.macAddress == _currentImageSenderMac)
-                .name,
-            receiver: "General Message", //sender
-          ),
-        );
-      } else {
-        ClientEvents.broadcastMessageReceivedEvent.broadcast(
-          NewMessageEventArgs(
-            senderMac: _currentImageSenderMac!,
-            message: 'Sent an image, but it was corrupted.',
-            imageBytes: _currentImageBytes,
-            sender: ContactsScreen.loggedInUsers
-                .firstWhere(
-                    (element) => element.macAddress == _currentImageSenderMac)
-                .name,
-            receiver: "General Message", //sender
-          ),
-        );
-      }
+      ClientEvents.broadcastMessageReceivedEvent.broadcast(
+        NewMessageEventArgs(
+          senderMac: split[2],
+          //if the received hash is equal to the hash of the received image, then the image is not corrupted.
+          message: listEquals(
+                  ImageUtils.hashImage(_currentImageSenders[split[2]]!),
+                  base64Decode(split[1]))
+              ? ''
+              : 'Sent an image, but it was corrupted.',
+          imageBytes: _currentImageSenders[split[2]]!,
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere((element) => element.macAddress == split[2])
+              .name,
+          receiver: "General Message", //sender
+        ),
+      );
+      _currentImageSenders.remove(split[2]);
     }
   }
 
@@ -237,8 +233,7 @@ class ClientReceive {
       if (kDebugMode) {
         print("Private image received from ${split[1]}");
       }
-      _currentImageSenderMac = split[1];
-      _currentImageBytes.clear();
+      _currentImageSenders[split[1]] = [];
     } else if (split[0] == MessagingProtocol.privateImageContd) {
       if (split[1].length % 4 > 0) {
         if (kDebugMode) {
@@ -246,38 +241,26 @@ class ClientReceive {
         }
         split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
       }
-      _currentImageBytes.addAll(base64Decode(split[1]));
+      _currentImageSenders[split[2]]!.addAll(base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
       await Future.delayed(const Duration(milliseconds: 80));
 
-      if (listEquals(
-          ImageUtils.hashImage(_currentImageBytes), base64Decode(split[1]))) {
-        ClientEvents.privateMessageReceivedEvent.broadcast(
-          NewMessageEventArgs(
-            senderMac: _currentImageSenderMac!,
-            message: '',
-            imageBytes: _currentImageBytes,
-            sender: ContactsScreen.loggedInUsers
-                .firstWhere(
-                    (element) => element.macAddress == _currentImageSenderMac)
-                .name,
-            receiver: "Private Message", //sender
-          ),
-        );
-      } else {
-        ClientEvents.privateMessageReceivedEvent.broadcast(
-          NewMessageEventArgs(
-            senderMac: _currentImageSenderMac!,
-            message: 'Sent an image, but it was corrupted.',
-            imageBytes: _currentImageBytes,
-            sender: ContactsScreen.loggedInUsers
-                .firstWhere(
-                    (element) => element.macAddress == _currentImageSenderMac)
-                .name,
-            receiver: "Private Message", //sender
-          ),
-        );
-      }
+      ClientEvents.privateMessageReceivedEvent.broadcast(
+        NewMessageEventArgs(
+          senderMac: split[2]!,
+          message: listEquals(
+                  ImageUtils.hashImage(_currentImageSenders[split[2]]!),
+                  base64Decode(split[1]))
+              ? ''
+              : 'Sent an image, but it was corrupted.',
+          imageBytes: _currentImageSenders[split[2]]!,
+          sender: ContactsScreen.loggedInUsers
+              .firstWhere((element) => element.macAddress == split[2])
+              .name,
+          receiver: "Private Message", //sender
+        ),
+      );
+      _currentImageSenders.remove(split[2]);
     }
   }
 

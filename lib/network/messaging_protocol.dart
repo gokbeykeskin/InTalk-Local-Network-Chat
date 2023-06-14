@@ -18,5 +18,4 @@ class MessagingProtocol {
   static const clientNumber = 'cn';
   static const removedTrustedDevice = 'rt';
   static const removedBannedDevice = 'rb';
-  static const decreaseClientNumber = 'dc';
 }

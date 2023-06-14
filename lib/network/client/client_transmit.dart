@@ -18,6 +18,7 @@ class ClientTransmit {
 
   //send a message to general chat
   void sendBroadcastMessage(String message) {
+    print("Sending a broadcast message at time ${DateTime.now()}");
     _sendMessage(
         "${MessagingProtocol.broadcastMessage}‽${user.macAddress}‽$message");
   }
@@ -69,8 +70,8 @@ class ClientTransmit {
   }
 
   // Send a message to the server (all above methods use this )
-  void _sendMessage(String message) {
-    message = clientSideEncryption.encrypt(null, message);
+  void _sendMessage(String message) async {
+    message = await clientSideEncryption.encrypt(null, message);
     socket.write('$message◊');
   }
 

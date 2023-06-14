@@ -9,12 +9,6 @@ import '../../utils/image_utils.dart';
 import '../messaging_protocol.dart';
 import 'client_events.dart';
 
-class ImageSender {
-  final String senderMac;
-  final List<int> imageBytes;
-  ImageSender({required this.senderMac, required this.imageBytes});
-}
-
 //Handles all the messages received by the server
 class ClientReceiver {
   //for handling access point transfers. When server quits 1st client becomes server
@@ -45,13 +39,13 @@ class ClientReceiver {
   }
 
   //Splits the message and calls the appropriate handler
-  void _handleMessage(String message) {
+  Future<void> _handleMessage(String message) async {
     var split = message.split("‽");
 
     //All the messages except the server intermediate key are encrypted
     //So we need to decrypt them before handling them.
     if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
-      message = clientSideEncryption.decrypt(null, message);
+      message = await clientSideEncryption.decrypt(null, message);
       split = message.split("‽");
     }
 
@@ -99,6 +93,7 @@ class ClientReceiver {
       }
       _handleNameUpdate(split);
     } else if (split[0] == MessagingProtocol.rejected) {
+      if (kDebugMode) {}
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
@@ -110,10 +105,10 @@ class ClientReceiver {
       clientSideEncryption.generateFinalKey(BigInt.parse(split[1]), split[2]);
     } else if (split[0] == MessagingProtocol.clientNumber) {
       clientNum = int.parse(split[1]);
-      print("My Client Number: ${clientNum}");
-    } else if (split[0] == MessagingProtocol.decreaseClientNumber) {
-      clientNum -= 1;
-      print("Decrease Number, My New Client Number: ${clientNum}");
+
+      if (kDebugMode) {
+        print("Client: Number Received: $clientNum");
+      }
     }
   }
 
@@ -122,8 +117,12 @@ class ClientReceiver {
       if (kDebugMode) {
         print("New user added: ${split[2]}");
       }
-      ContactsScreen.loggedInUsers.add(User(
-          macAddress: split[1], name: split[2], port: int.parse(split[3])));
+      if (ContactsScreen.loggedInUsers
+          .where((element) => element.macAddress == split[1])
+          .isEmpty) {
+        ContactsScreen.loggedInUsers.add(User(
+            macAddress: split[1], name: split[2], port: int.parse(split[3])));
+      }
       _updateTrustedDeviceNames(split[1], split[2]);
       ClientEvents.usersUpdatedEvent.broadcast();
     }
@@ -175,6 +174,7 @@ class ClientReceiver {
 
   void _handleBroadcastMessage(List<String> split) async {
     if (split[1] != user.macAddress) {
+      print("Received a broadcast message at time ${DateTime.now()}");
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
             senderMac: split[1],

@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
+import 'package:local_chat/network/client/client_events.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../../auth/user.dart';
@@ -68,12 +69,21 @@ class LanServer {
       _isUserAccepted = args.accepted;
     });
 
-    // Create a server socket that listens for incoming client connections
-    _serverSocket = await ServerSocket.bind(ipAddress, 12345, shared: true);
+    try {
+      // Create a server socket that listens for incoming client connections
+      _serverSocket = await ServerSocket.bind(ipAddress, 12345, shared: true);
+    } catch (e) {
+      if (kDebugMode) {
+        print(
+            "Server socket could not be created. Maybe another server is running?:$e");
+      }
+      ClientEvents.connectionLostEvent.broadcast();
+      return;
+    }
+
     // Listen for incoming client connections
     _serverSocket?.listen((socket) {
-      _connectedClients[socket] = _connectedClients.length - 1;
-      print("Connected Clients: ${_connectedClients.length}");
+      _connectedClients[socket] = _connectedClients.length;
 
       // Add the socket to the list of connected sockets
       _messageStreamControllers.add(CustomStreamController(socket: socket));
@@ -103,7 +113,8 @@ class LanServer {
               _connectedClients[connectedSocket] =
                   _connectedClients[connectedSocket]! - 1;
               _sendMessage(
-                  MessagingProtocol.decreaseClientNumber, connectedSocket);
+                  '${MessagingProtocol.clientNumber}‽${_connectedClients[connectedSocket]}',
+                  connectedSocket);
             }
           }
         } catch (e) {
@@ -140,14 +151,6 @@ class LanServer {
     _messageStreamControllers.clear();
   }
 
-  // Send a message to all connected clients
-  void _sendMessageToAll(String message) {
-    // Send the message to all connected sockets
-    for (var socket in _connectedClients.keys) {
-      _sendMessage(message, socket);
-    }
-  }
-
   void _sendMessageToAllExcept(String message, Socket socket) {
     for (var s in _connectedClients.keys) {
       if (s != socket) {
@@ -156,10 +159,11 @@ class LanServer {
     }
   }
 
-  void _sendMessage(String message, Socket socket) {
+  void _sendMessage(String message, Socket socket) async {
     // Encrypt and send a message to a socket.
-    message = serverSideEncryption.encrypt(socket, message) ?? message;
-    socket.write('$message◊');
+    String encryptedMessage =
+        await serverSideEncryption.encrypt(socket, message);
+    socket.write('$encryptedMessage◊');
   }
 
   void _sendOpenMessage(String message, Socket socket) {
@@ -179,18 +183,18 @@ class LanServer {
     if (message.contains("◊")) {
       var splits = message.split("◊");
       for (var split in splits) {
-        _processMessages(split, socket);
+        _processMessage(split, socket);
       }
     }
   }
 
   // Process parsed messages
-  void _processMessages(String message, Socket socket) async {
+  void _processMessage(String message, Socket socket) async {
     var split = message.split("‽");
     //All messages except login messages are encrypted
     //so we need to decrypt them
     if (!(split[0] == MessagingProtocol.login)) {
-      message = serverSideEncryption.decrypt(socket, message).trim();
+      message = (await serverSideEncryption.decrypt(socket, message)).trim();
       split = message.split("‽");
     }
 
@@ -200,7 +204,7 @@ class LanServer {
       }
       serverSideEncryption.generateKeyWithClient(
           socket, BigInt.parse(split[4]));
-      _processHeartbeat(message, socket);
+      _processLogin(message, socket);
     } else if (split[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Server: broadcast message received from ${split[1]}");
@@ -227,7 +231,7 @@ class LanServer {
     }
   }
 
-  Future<void> _processHeartbeat(String message, Socket socket) async {
+  Future<void> _processLogin(String message, Socket socket) async {
     var split = message.split("‽");
     List<String>? trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
             ?.getStringList('trustedDeviceMACs') ??
@@ -242,9 +246,7 @@ class LanServer {
             ?.getStringList('bannedDeviceNames') ??
         [];
     if (bannedDeviceMACs.contains(split[1])) {
-      _sendMessage('${MessagingProtocol.rejected}‽', socket);
       _kickUser(socket);
-      rejectEvent.broadcast();
       return;
     } else if (!trustedDeviceMACs.contains(split[1]) &&
         split[1] != _myUser.macAddress) {
@@ -257,9 +259,7 @@ class LanServer {
                 500)); // wait for 500 milliseconds before checking again
       }
       if (!_isUserAccepted!) {
-        _sendMessage('${MessagingProtocol.rejected}‽', socket);
         _kickUser(socket);
-        rejectEvent.broadcast();
         return;
       }
       _isUserAccepted = null;
@@ -295,7 +295,7 @@ class LanServer {
     //Assign a client number to the new client. This number is used to choose
     // next server candidate when host device is disconnected.
     _sendMessage(
-        '${MessagingProtocol.clientNumber}‽${_connectedClients.length - 1}',
+        '${MessagingProtocol.clientNumber}‽${_connectedClients[socket]}',
         socket);
   }
 
@@ -331,9 +331,12 @@ class LanServer {
   }
 
   //User rejected the new client, kick it.
-  void _kickUser(Socket socket) {
+  void _kickUser(Socket socket) async {
+    _sendMessage('${MessagingProtocol.rejected}‽', socket);
+    await Future.delayed(const Duration(milliseconds: 200));
     _isUserAccepted = null;
     socket.destroy();
     _connectedClients.remove(socket);
+    rejectEvent.broadcast();
   }
 }

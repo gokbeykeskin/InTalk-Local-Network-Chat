@@ -12,7 +12,7 @@ import '../screens/contacts_screen/contacts_screen.dart';
 class ImageUtils {
   static List<Uint8List> splitImage(Uint8List data) {
     final List<Uint8List> chunks = [];
-    const int chunkSize = 512; //bunu arttırarak deney yap.
+    const int chunkSize = 512;
     int offset = 0;
     int remaining = data.length;
 

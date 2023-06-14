@@ -58,6 +58,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () {
                       showDialog(context: context, builder: (_) => nameInput());
                     },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30.0))),
                     child: const Text(
                       'Connect',
                       style: TextStyle(

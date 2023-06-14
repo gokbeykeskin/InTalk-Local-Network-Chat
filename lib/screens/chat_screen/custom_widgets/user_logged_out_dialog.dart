@@ -29,7 +29,7 @@ class NotConnectedDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text("Something went wrong."),
       content: const Text(
-          "You are probably not connected to a local network or the access point is closed unexpectedly. Connect a local network and try again."),
+          "You are probably not connected to a local network. Connect a local network and try again."),
       actions: [
         TextButton(
             onPressed: () {

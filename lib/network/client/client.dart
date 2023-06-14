@@ -49,8 +49,9 @@ class LanClient {
       user.macAddress = (await LanUtils.getDeviceId())!;
     } catch (e) {
       if (kDebugMode) {
-        print("MAC ADDRESS GET FAILED:$e");
-        user.macAddress = "11223344"; //for macos debugging
+        print(
+            "Unsupported Device Type. Creating a random mac address for debug purposes:$e");
+        user.macAddress = "11223344"; //for macos debugging"
       }
     }
     _messageStream.listen((message) {
@@ -88,6 +89,7 @@ class LanClient {
     _clientReceive =
         ClientReceiver(user: user, clientSideEncryption: clientSideEncryption);
     _intermediateKey = clientSideEncryption.generateIntermediateKey();
+    //send login to server
     clientTransmit.sendOpenMessage(
         "${MessagingProtocol.login}‽${user.macAddress}‽${user.name}‽${socket!.port}‽$_intermediateKey");
     // Listen for incoming messages from the server
@@ -98,11 +100,17 @@ class LanClient {
     }).onDone(() {
       //When server is closed, if you are the next candidate , you will become server.
       //otherwise you will connect to new server.
-      _clientReceive.clientNum -= 1;
-      if (_clientReceive.clientNum == 0) {
-        ClientEvents.becomeServerEvent.broadcast();
-      } else {
-        ClientEvents.connectToNewServerEvent.broadcast();
+      try {
+        _clientReceive.clientNum -= 1;
+        if (_clientReceive.clientNum <= 0) {
+          ClientEvents.becomeServerEvent.broadcast();
+        } else {
+          ClientEvents.connectToNewServerEvent.broadcast();
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print("Client is kicked.");
+        }
       }
     });
     //Check connection every 10 seconds
@@ -132,7 +140,7 @@ class LanClient {
           if (e.toString().contains("Too many open files")) {
             //File limit is exceeded, give garbage collector some time to clean up
             await Future.delayed(const Duration(seconds: 10));
-          } else {
+          } else if (e.toString().contains("Network is unreachable")) {
             //Connection is lost
             connected = false;
             timer.cancel();

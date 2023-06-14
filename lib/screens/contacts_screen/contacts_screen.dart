@@ -7,8 +7,10 @@ import 'package:local_chat/network/client/client.dart';
 import 'package:local_chat/network/client/client_events.dart';
 import 'package:local_chat/network/server/server.dart';
 import 'package:local_chat/screens/chat_screen/chat_screen.dart';
+import 'package:local_chat/screens/chat_screen/custom_widgets/user_logged_out_dialog.dart';
 import 'package:local_chat/screens/contacts_screen/custom_widgets/add_trusted_device.dart';
 import 'package:local_chat/screens/contacts_screen/custom_widgets/rejected_dialog.dart';
+import 'package:local_chat/screens/home_screen/custom_widgets/waiting_dialog.dart';
 import 'package:local_chat/screens/home_screen/home_screen.dart';
 import 'package:local_chat/screens/settings_screen/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -111,13 +113,15 @@ class _ContactsScreenState extends State<ContactsScreen>
           onTap: (index) {},
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: <Widget>[
-          _createContactsTab(),
-          _createGeneralChatTab(),
-        ],
-      ),
+      body: _server == null && ContactsScreen.loggedInUsers.isEmpty
+          ? const WaitingDialog()
+          : TabBarView(
+              controller: _tabController,
+              children: <Widget>[
+                _createContactsTab(),
+                _createGeneralChatTab(),
+              ],
+            ),
     );
   }
 
@@ -159,15 +163,17 @@ class _ContactsScreenState extends State<ContactsScreen>
     //create a client and try to connect each ip in the subnet.
     _client = LanClient(user: User(name: widget.name));
     await _client?.start();
-    await tryConnections(_client!);
+    await _tryConnections(_client!);
     //if the connection is successful, job is done. Simply return.
     if (_client!.connected) return;
 
-    //if there is no server, try to become both a server and a client
+    //if there is no server to connect, try to become both a server and a client
     //if this also fails, the most likely reason is that there is no LAN connection.
     //In this case, show a dialog and return.
     try {
-      _server = LanServer(myUser: _client!.user);
+      setState(() {
+        _server = LanServer(myUser: _client!.user);
+      });
       await _server?.start();
       _client?.connect(-1); //connect to your own ip.
       if (kDebugMode) {
@@ -212,11 +218,11 @@ class _ContactsScreenState extends State<ContactsScreen>
     _client = LanClient(user: User(name: widget.name));
     await _client?.start();
 
-    await tryConnections(_client!);
+    await _tryConnections(_client!);
   }
 
   //tries to connect to each ip in the subnet.
-  Future<void> tryConnections(LanClient client) async {
+  Future<void> _tryConnections(LanClient client) async {
     List<Future<void>> connectFutures = [];
     for (int i = 0; i < 256; i++) {
       connectFutures.add(client.connect(i));

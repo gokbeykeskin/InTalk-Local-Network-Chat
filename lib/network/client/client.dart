@@ -16,7 +16,6 @@ class LanClient {
   User user;
   Socket? socket;
   bool connected = false;
-
   late String _networkIpAdress;
   late String _networkIpWithoutLastDigits;
   late BigInt _intermediateKey;
@@ -134,13 +133,13 @@ class LanClient {
               timeout: const Duration(milliseconds: 8000));
           tempSock.destroy();
         } catch (e) {
-          if (kDebugMode) {
-            print("Periodic check (connection lost):$e");
-          }
           if (e.toString().contains("Too many open files")) {
             //File limit is exceeded, give garbage collector some time to clean up
             await Future.delayed(const Duration(seconds: 10));
-          } else if (e.toString().contains("Network is unreachable")) {
+          } else if (!e.toString().contains("Connection refused")) {
+            if (kDebugMode) {
+              print("Periodic check (connection lost):$e");
+            }
             //Connection is lost
             connected = false;
             timer.cancel();

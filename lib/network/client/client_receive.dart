@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import '../../auth/user.dart';
 import '../../encrypt/client_encryption.dart';
 import '../../screens/contacts_screen/contacts_screen.dart';
 import '../../utils/image_utils.dart';
+import '../../utils/trusted_device_utils.dart';
 import '../messaging_protocol.dart';
 import 'client_events.dart';
 
@@ -17,9 +19,7 @@ class ClientReceiver {
   final ClientSideEncryption clientSideEncryption;
   //Your information.
   final User user;
-
   ClientReceiver({required this.user, required this.clientSideEncryption});
-
   //MAC-Image bytes
   //This is used to keep track of the image bytes received from each client since
   //the image bytes are received in chunks.
@@ -64,6 +64,16 @@ class ClientReceiver {
         print("Client: Banned device ${split[1]} received.");
       }
       _handleBannedDevice(split[1], split[2]);
+    } else if (split[0] == MessagingProtocol.untrustDevice) {
+      if (kDebugMode) {
+        print("Client: Trusted device ${split[1]} received.");
+      }
+      TrustedDeviceUtils.handleUntrustedDevice(split[1]);
+    } else if (split[0] == MessagingProtocol.unbanDevice) {
+      if (kDebugMode) {
+        print("Client: Banned device ${split[1]} received.");
+      }
+      TrustedDeviceUtils.handleunbannedDevice(split[1]);
     } else if (split[0] == MessagingProtocol.logout) {
       if (kDebugMode) {
         print("Client: Logout received from ${split[1]}");
@@ -93,7 +103,6 @@ class ClientReceiver {
       }
       _handleNameUpdate(split);
     } else if (split[0] == MessagingProtocol.rejected) {
-      if (kDebugMode) {}
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
@@ -123,7 +132,7 @@ class ClientReceiver {
         ContactsScreen.loggedInUsers.add(User(
             macAddress: split[1], name: split[2], port: int.parse(split[3])));
       }
-      _updateTrustedDeviceNames(split[1], split[2]);
+      TrustedDeviceUtils.updateTrustedDeviceNames(split[1], split[2]);
       ClientEvents.usersUpdatedEvent.broadcast();
     }
   }
@@ -143,6 +152,7 @@ class ClientReceiver {
       ContactsScreen.trustedDevicePreferences
           ?.setStringList('trustedDeviceNames', trustedDeviceNames);
     }
+    ClientEvents.usersUpdatedEvent.broadcast();
   }
 
   void _handleBannedDevice(String macAddress, String userName) {
@@ -152,7 +162,8 @@ class ClientReceiver {
     List<String>? bannedDeviceNames = ContactsScreen.trustedDevicePreferences
         ?.getStringList('bannedDeviceNames');
     bannedDeviceNames ??= [];
-    if (!bannedDeviceMACs.contains(macAddress)) {
+    if (!bannedDeviceMACs.contains(macAddress) &&
+        macAddress != user.macAddress) {
       bannedDeviceMACs.add(macAddress);
       bannedDeviceNames.add(userName);
       ContactsScreen.trustedDevicePreferences
@@ -160,6 +171,7 @@ class ClientReceiver {
       ContactsScreen.trustedDevicePreferences
           ?.setStringList('bannedDeviceNames', bannedDeviceNames);
     }
+    ClientEvents.usersUpdatedEvent.broadcast();
   }
 
 //handle when some other client logs out
@@ -172,7 +184,7 @@ class ClientReceiver {
     ClientEvents.usersUpdatedEvent.broadcast();
   }
 
-  void _handleBroadcastMessage(List<String> split) async {
+  void _handleBroadcastMessage(List<String> split) {
     if (split[1] != user.macAddress) {
       print("Received a broadcast message at time ${DateTime.now()}");
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
@@ -188,7 +200,7 @@ class ClientReceiver {
     }
   }
 
-  void _handlePrivateMessage(List<String> split) async {
+  void _handlePrivateMessage(List<String> split) {
     ClientEvents.privateMessageReceivedEvent.broadcast(
       NewMessageEventArgs(
           senderMac: split[1],
@@ -205,7 +217,8 @@ class ClientReceiver {
       if (kDebugMode) {
         print("Broadcast image received from ${split[1]}");
       }
-      _currentImageSenders[split[1]] = [];
+      _currentImageSenders[split[1]] = List.generate(
+          int.parse(split[2]) * (ImageUtils.chunkSize), (index) => 0);
     } else if (split[0] == MessagingProtocol.broadcastImageContd) {
       if (split[1].length % 4 > 0) {
         if (kDebugMode) {
@@ -214,7 +227,9 @@ class ClientReceiver {
         split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
       }
       //add incoming image bytes to senders list
-      _currentImageSenders[split[2]]!.addAll(base64Decode(split[1]));
+      int index = int.parse(split[3]) * ImageUtils.chunkSize;
+      _currentImageSenders[split[2]]!.replaceRange(
+          index, index + ImageUtils.chunkSize, base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
       await Future.delayed(const Duration(milliseconds: 80));
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
@@ -226,6 +241,7 @@ class ClientReceiver {
                   base64Decode(split[1]))
               ? ''
               : 'Sent an image, but it was corrupted.',
+
           imageBytes: _currentImageSenders[split[2]]!,
           sender: ContactsScreen.loggedInUsers
               .firstWhere((element) => element.macAddress == split[2])
@@ -242,7 +258,8 @@ class ClientReceiver {
       if (kDebugMode) {
         print("Private image received from ${split[1]}");
       }
-      _currentImageSenders[split[1]] = [];
+      _currentImageSenders[split[1]] = List.generate(
+          int.parse(split[3]) * ImageUtils.chunkSize, (index) => 0);
     } else if (split[0] == MessagingProtocol.privateImageContd) {
       if (split[1].length % 4 > 0) {
         if (kDebugMode) {
@@ -250,10 +267,11 @@ class ClientReceiver {
         }
         split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
       }
-      _currentImageSenders[split[2]]!.addAll(base64Decode(split[1]));
+      int index = int.parse(split[4]) * ImageUtils.chunkSize;
+      _currentImageSenders[split[2]]!.replaceRange(
+          index, index + ImageUtils.chunkSize, base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
       await Future.delayed(const Duration(milliseconds: 80));
-
       ClientEvents.privateMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
           senderMac: split[2],
@@ -278,26 +296,11 @@ class ClientReceiver {
       if (kDebugMode) {
         print("Name update received from ${split[1]}");
       }
-      _updateTrustedDeviceNames(split[1], split[2]);
+      TrustedDeviceUtils.updateTrustedDeviceNames(split[1], split[2]);
       ContactsScreen.loggedInUsers
           .firstWhere((element) => element.macAddress == split[1])
           .name = split[2];
       ClientEvents.usersUpdatedEvent.broadcast();
-    }
-  }
-
-  //when a user changes their name, update the name in the trusted device list.
-  void _updateTrustedDeviceNames(String mac, String name) {
-    List<String> trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
-            ?.getStringList('trustedDeviceMACs') ??
-        [];
-    List<String> trustedDeviceNames = ContactsScreen.trustedDevicePreferences
-            ?.getStringList('trustedDeviceNames') ??
-        [];
-    if (trustedDeviceMACs.contains(mac)) {
-      trustedDeviceNames[trustedDeviceMACs.indexOf(mac)] = name;
-      ContactsScreen.trustedDevicePreferences
-          ?.setStringList('trustedDeviceNames', trustedDeviceNames);
     }
   }
 }

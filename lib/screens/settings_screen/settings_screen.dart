@@ -14,8 +14,9 @@ class NameChangedEventArgs extends EventArgs {
 class SettingsScreen extends StatefulWidget {
   String username;
   static Event nameChangedEvent = Event();
-
-  SettingsScreen({Key? key, required this.username}) : super(key: key);
+  LanServer? server;
+  SettingsScreen({Key? key, required this.username, required this.server})
+      : super(key: key);
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -168,6 +169,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trustedDeviceNames = ContactsScreen.trustedDevicePreferences
                   ?.getStringList('trustedDeviceNames') ??
               [];
+          bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('bannedDeviceMACs') ??
+              [];
+          bannedDeviceNames = ContactsScreen.trustedDevicePreferences
+                  ?.getStringList('bannedDeviceNames') ??
+              [];
         });
       }
     });
@@ -233,6 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _removeDeviceFromTrustedList(String deviceMAC, String username) {
+    widget.server?.sendUntrustedDeviceToAll(deviceMAC);
     setState(
       () {
         trustedDeviceMACs.remove(deviceMAC);
@@ -249,6 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             action: SnackBarAction(
                 label: 'Undo',
                 onPressed: () {
+                  widget.server?.sendTrustedDeviceToAll(deviceMAC, username);
                   if (mounted) {
                     setState(() {
                       trustedDeviceMACs.add(deviceMAC);
@@ -314,6 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   _removeDeviceFromBannedList(String deviceMAC, String username) {
+    widget.server?.sendUnbannedDeviceToAll(deviceMAC);
     setState(
       () {
         bannedDeviceMACs.remove(deviceMAC);
@@ -330,6 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             action: SnackBarAction(
                 label: 'Undo',
                 onPressed: () {
+                  widget.server?.sendBannedDeviceToAll(deviceMAC, username);
                   if (mounted) {
                     setState(() {
                       bannedDeviceMACs.add(deviceMAC);

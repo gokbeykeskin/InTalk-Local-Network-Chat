@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -33,13 +34,14 @@ class ClientTransmit {
   Future<void> sendBroadcastImage(Uint8List base64Image) async {
     List<Uint8List> bytes = ImageUtils.splitImage(base64Image);
     List<int> hashedBytes = ImageUtils.hashImage(base64Image);
-    _sendMessage("${MessagingProtocol.broadcastImageStart}‽${user.macAddress}");
+    _sendMessage(
+        "${MessagingProtocol.broadcastImageStart}‽${user.macAddress}‽${bytes.length}");
     for (var i = 0; i < bytes.length; i++) {
       await Future.delayed(
         const Duration(milliseconds: 50),
       );
-      _sendMessage(
-          '${MessagingProtocol.broadcastImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}');
+      await _sendMessage(
+          '${MessagingProtocol.broadcastImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}‽$i');
     }
     _sendMessage(
         '${MessagingProtocol.broadcastImageEnd}‽${base64Encode(hashedBytes)}‽${user.macAddress}');
@@ -50,13 +52,13 @@ class ClientTransmit {
     List<Uint8List> bytes = ImageUtils.splitImage(base64Image);
     List<int> hashedBytes = ImageUtils.hashImage(base64Image);
     _sendMessage(
-        "${MessagingProtocol.privateImageStart}‽${user.macAddress}‽${receiver.port}");
+        "${MessagingProtocol.privateImageStart}‽${user.macAddress}‽${receiver.port}‽${bytes.length}");
     for (var i = 0; i < bytes.length; i++) {
       await Future.delayed(
         const Duration(milliseconds: 50),
       );
-      _sendMessage(
-          '${MessagingProtocol.privateImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}‽${receiver.port}');
+      await _sendMessage(
+          '${MessagingProtocol.privateImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}‽${receiver.port}‽$i');
     }
     _sendMessage(
         '${MessagingProtocol.privateImageEnd}‽${base64Encode(hashedBytes)}‽${user.macAddress}‽${receiver.port}');
@@ -70,7 +72,7 @@ class ClientTransmit {
   }
 
   // Send a message to the server (all above methods use this )
-  void _sendMessage(String message) async {
+  Future<void> _sendMessage(String message) async {
     message = await clientSideEncryption.encrypt(null, message);
     socket.write('$message◊');
   }

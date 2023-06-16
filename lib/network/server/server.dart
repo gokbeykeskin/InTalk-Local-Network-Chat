@@ -34,10 +34,8 @@ class LanServer {
   final Map<Socket, int> _connectedClients = {};
   //the user which logged in from this device.
   final User _myUser;
-  LanServer({required User myUser}) : _myUser = myUser;
 
-  late List<String> trustedDevices;
-  late List<String> bannedDevices;
+  LanServer({required User myUser}) : _myUser = myUser;
 
   //When a new device wants to connect, this event is broadcasted to ask
   //the user if they wants to accept the new device
@@ -167,7 +165,7 @@ class LanServer {
   }
 
   void _sendOpenMessage(String message, Socket socket) {
-    // Send the message to a socket.
+    // Send the message to a socket without encryption.
     socket.write('$message◊');
   }
 
@@ -176,6 +174,28 @@ class LanServer {
       return element.remotePort == port;
     });
     _sendMessage(message, socket);
+  }
+
+  void _sendMessageToAll(String message) {
+    for (var socket in _connectedClients.keys) {
+      _sendMessage(message, socket);
+    }
+  }
+
+  void sendTrustedDeviceToAll(String macAddress, String name) {
+    _sendMessageToAll('${MessagingProtocol.trustedDevice}‽$macAddress‽$name');
+  }
+
+  void sendBannedDeviceToAll(String macAddress, String name) {
+    _sendMessageToAll('${MessagingProtocol.bannedDevice}‽$macAddress‽$name');
+  }
+
+  void sendUntrustedDeviceToAll(String macAddress) {
+    _sendMessageToAll('${MessagingProtocol.untrustDevice}‽$macAddress');
+  }
+
+  void sendUnbannedDeviceToAll(String macAddress) {
+    _sendMessageToAll('${MessagingProtocol.unbanDevice}‽$macAddress');
   }
 
   // Parse incoming messages
@@ -200,7 +220,7 @@ class LanServer {
 
     if (split[0] == MessagingProtocol.login) {
       if (kDebugMode) {
-        print("Server: heartbeat received from ${split[2]}");
+        print("Server: Login received from ${split[2]}");
       }
       serverSideEncryption.generateKeyWithClient(
           socket, BigInt.parse(split[4]));
@@ -259,6 +279,7 @@ class LanServer {
                 500)); // wait for 500 milliseconds before checking again
       }
       if (!_isUserAccepted!) {
+        sendBannedDeviceToAll(split[1], split[2]);
         _kickUser(socket);
         return;
       }
@@ -276,6 +297,7 @@ class LanServer {
         //send yourself to the new client since it is not in the list of logged in clients
         '${MessagingProtocol.login}‽${_myUser.macAddress}‽${_myUser.name}‽${_myUser.port}',
         socket);
+    sendTrustedDeviceToAll(split[1], split[2]);
     //send all trusted devices to the new client
     for (int i = 0; i < trustedDeviceMACs.length; i++) {
       _sendMessage(

@@ -22,18 +22,18 @@ class ServerSideEncryption extends BaseEncryption {
     sendOpenMessage(
         '${MessagingProtocol.serverIntermediateKey}‽${myIntermediateKey.toString()}‽${iv.base64}',
         socket);
-    BigInt finalKey = clientsIntermediateKey.modPow(myNumber, n);
-    if (finalKey.toString().length > 32) {
-      finalKey = BigInt.parse(finalKey.toString().substring(0, 32));
-    } else if (finalKey.toString().length < 32) {
+    BigInt intKey = clientsIntermediateKey.modPow(myNumber, n);
+    if (intKey.toString().length > 32) {
+      intKey = BigInt.parse(intKey.toString().substring(0, 32));
+    } else if (intKey.toString().length < 32) {
       //this is for handling the extreme error case where the final key is less than 32 characters long
-      //both the server and client does this so even if the server generates a key that is less than 32 characters long
+      //both the server and client does this. So even if the server generates a key that is less than 32 characters long
       //they both will pad it to 32 characters
-      finalKey = BigInt.parse(finalKey.toString().padRight(32, '0'));
+      intKey = BigInt.parse(intKey.toString().padRight(32, '0'));
     }
 
     _encryptionPairs[socket] =
-        EncryptionPair(secretKey: Key.fromUtf8(finalKey.toString()), iv: iv);
+        EncryptionPair(secretKey: Key.fromUtf8(intKey.toString()), iv: iv);
     _encrypters[socket] =
         Encrypter(AES(_encryptionPairs[socket]!.secretKey, padding: null));
   }

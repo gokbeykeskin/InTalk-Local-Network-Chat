@@ -85,8 +85,10 @@ class _ContactsScreenState extends State<ContactsScreen>
               Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (context) =>
-                          SettingsScreen(username: widget.name)));
+                      builder: (context) => SettingsScreen(
+                            username: widget.name,
+                            server: _server,
+                          )));
             },
             icon: const Icon(Icons.settings),
           ),
@@ -171,9 +173,11 @@ class _ContactsScreenState extends State<ContactsScreen>
     //if this also fails, the most likely reason is that there is no LAN connection.
     //In this case, show a dialog and return.
     try {
-      setState(() {
-        _server = LanServer(myUser: _client!.user);
-      });
+      if (mounted) {
+        setState(() {
+          _server = LanServer(myUser: _client!.user);
+        });
+      }
       await _server?.start();
       _client?.connect(-1); //connect to your own ip.
       if (kDebugMode) {

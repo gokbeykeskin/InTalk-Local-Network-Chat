@@ -169,7 +169,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     await _client?.start();
     await _tryConnections(_client!);
     //if the connection is successful, job is done. Simply return.
-    if (_client!.connected) return;
+    if (_client!.isConnected) return;
 
     //if there is no server to connect, try to become both a server and a client
     //if this also fails, the most likely reason is that there is no LAN connection.

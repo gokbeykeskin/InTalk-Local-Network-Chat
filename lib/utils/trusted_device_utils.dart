@@ -37,7 +37,7 @@ class TrustedDeviceUtils {
     ClientEvents.usersUpdatedEvent.broadcast();
   }
 
-  static void handleunbannedDevice(String mac) {
+  static void handleUnbannedDevice(String mac) {
     List<String> bannedDeviceMACs = ContactsScreen.trustedDevicePreferences
             ?.getStringList('bannedDeviceMACs') ??
         [];

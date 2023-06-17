@@ -84,7 +84,7 @@ class ClientReceiver {
       if (kDebugMode) {
         print("Client: Banned device ${tokens[1]} received.");
       }
-      TrustedDeviceUtils.handleunbannedDevice(tokens[1]);
+      TrustedDeviceUtils.handleUnbannedDevice(tokens[1]);
     } else if (tokens[0] == MessagingProtocol.logout) {
       if (kDebugMode) {
         print("Client: Logout received from ${tokens[1]}");

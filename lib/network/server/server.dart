@@ -36,10 +36,10 @@ class LanServer {
   // A stream controller list for sending messages to all connected clients
   final List<CustomStreamController> _messageStreamControllers = [];
 
-  late ServerSideEncryption serverSideEncryption;
+  late ServerSideEncryption _serverSideEncryption;
 
   Future<void> start() async {
-    serverSideEncryption = ServerSideEncryption(
+    _serverSideEncryption = ServerSideEncryption(
         sendOpenMessage: (message, socket) =>
             _sendOpenMessage(message, socket));
     // Get the IP address of the local device
@@ -137,18 +137,10 @@ class LanServer {
     _hearbeatTimer?.cancel();
   }
 
-  void _sendMessageToAllExcept(String message, Socket socket) {
-    for (var s in _connectedClients.keys) {
-      if (s != socket) {
-        _sendMessage(message, s);
-      }
-    }
-  }
-
   void _sendMessage(String message, Socket socket) async {
     // Encrypt and send a message to a socket.
     String encryptedMessage =
-        await serverSideEncryption.encrypt(socket, message);
+        await _serverSideEncryption.encrypt(socket, message);
     socket.write('$encryptedMessage◊');
   }
 
@@ -157,17 +149,25 @@ class LanServer {
     socket.write('$message◊');
   }
 
+  void _sendMessageToAll(String message) {
+    for (var socket in _connectedClients.keys) {
+      _sendMessage(message, socket);
+    }
+  }
+
+  void _sendMessageToAllExcept(String message, Socket socket) {
+    for (var s in _connectedClients.keys) {
+      if (s != socket) {
+        _sendMessage(message, s);
+      }
+    }
+  }
+
   void _sendMessageToPort(String message, int port) {
     Socket socket = _connectedClients.keys.firstWhere((element) {
       return element.remotePort == port;
     });
     _sendMessage(message, socket);
-  }
-
-  void _sendMessageToAll(String message) {
-    for (var socket in _connectedClients.keys) {
-      _sendMessage(message, socket);
-    }
   }
 
   void sendTrustedDeviceToAll(String macAddress, String name) {
@@ -202,7 +202,7 @@ class LanServer {
     //All messages except login messages are encrypted
     //so we need to decrypt them
     if (!(tokens[0] == MessagingProtocol.login)) {
-      message = (await serverSideEncryption.decrypt(socket, message)).trim();
+      message = (await _serverSideEncryption.decrypt(socket, message)).trim();
       tokens = message.split("‽");
     }
 
@@ -239,7 +239,8 @@ class LanServer {
 
   Future<void> _processLogin(String message, Socket socket) async {
     var tokens = message.split("‽");
-    serverSideEncryption.generateKeyWithClient(socket, BigInt.parse(tokens[4]));
+    _serverSideEncryption.generateKeyWithClient(
+        socket, BigInt.parse(tokens[4]));
 
     List<String>? trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
             ?.getStringList('trustedDeviceMACs') ??

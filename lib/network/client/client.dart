@@ -16,11 +16,11 @@ import '../../utils/lan_utils.dart';
 class LanClient {
   User user;
   Socket? socket;
-  bool connected = false;
+  bool isConnected = false;
   late String _networkIpAdress;
   late String _networkIpWithoutLastDigits;
   late BigInt _intermediateKey;
-  late ClientTransmit clientTransmit;
+  late ClientTransmitter clientTransmit;
   late ClientReceiver _clientReceive;
 
   ClientSideEncryption clientSideEncryption = ClientSideEncryption();
@@ -71,21 +71,21 @@ class LanClient {
       socket = await Socket.connect(ipAddress, 12345,
           timeout: const Duration(milliseconds: 2000));
       user.port = socket?.port;
-      connected = true;
+      isConnected = true;
       if (kDebugMode) {
         print('Successfully connected to the server: $ipAddress:12345');
       }
     } catch (e) {
       return;
     }
-    clientTransmit = ClientTransmit(
+    clientTransmit = ClientTransmitter(
         user: user,
         socket: socket!,
         clientSideEncryption: clientSideEncryption);
     _clientReceive = ClientReceiver(
         user: user,
         clientSideEncryption: clientSideEncryption,
-        connected: connected);
+        connected: isConnected);
     _intermediateKey = clientSideEncryption.generateIntermediateKey();
     //send login to server
     clientTransmit.sendOpenMessage(
@@ -117,7 +117,7 @@ class LanClient {
   }
 
   void stop() {
-    connected = false;
+    isConnected = false;
     ClientEvents.stop();
     // Close the client socket to disconnect from the server
     socket?.destroy();

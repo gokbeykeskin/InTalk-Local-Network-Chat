@@ -9,11 +9,11 @@ import '../../encrypt/client_encryption.dart';
 import '../../utils/image_utils.dart';
 import '../messaging_protocol.dart';
 
-class ClientTransmit {
+class ClientTransmitter {
   ClientSideEncryption clientSideEncryption;
   User user;
   Socket socket;
-  ClientTransmit(
+  ClientTransmitter(
       {required this.user,
       required this.socket,
       required this.clientSideEncryption});

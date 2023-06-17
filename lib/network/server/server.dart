@@ -35,6 +35,8 @@ class LanServer {
   //the user which logged in from this device.
   final User _myUser;
 
+  late Timer _hearbeatTimer;
+
   LanServer({required User myUser}) : _myUser = myUser;
 
   //When a new device wants to connect, this event is broadcasted to ask
@@ -78,7 +80,7 @@ class LanServer {
       ClientEvents.connectionLostEvent.broadcast();
       return;
     }
-
+    _heartbeat();
     // Listen for incoming client connections
     _serverSocket?.listen((socket) {
       _connectedClients[socket] = _connectedClients.length;
@@ -133,7 +135,7 @@ class LanServer {
     }
     authEvent.unsubscribeAll();
     rejectEvent.unsubscribeAll();
-
+    _hearbeatTimer.cancel();
     // Close the server socket to stop accepting new client connections
     await _serverSocket?.close();
 
@@ -360,5 +362,11 @@ class LanServer {
     socket.destroy();
     _connectedClients.remove(socket);
     rejectEvent.broadcast();
+  }
+
+  void _heartbeat() {
+    _hearbeatTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _sendMessageToAll('${MessagingProtocol.heartbeat}‽');
+    });
   }
 }

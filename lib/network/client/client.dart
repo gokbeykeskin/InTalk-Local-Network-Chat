@@ -85,8 +85,10 @@ class LanClient {
         user: user,
         socket: socket!,
         clientSideEncryption: clientSideEncryption);
-    _clientReceive =
-        ClientReceiver(user: user, clientSideEncryption: clientSideEncryption);
+    _clientReceive = ClientReceiver(
+        user: user,
+        clientSideEncryption: clientSideEncryption,
+        connected: connected);
     _intermediateKey = clientSideEncryption.generateIntermediateKey();
     //send login to server
     clientTransmit.sendOpenMessage(
@@ -111,9 +113,11 @@ class LanClient {
           print("Client is kicked.");
         }
       }
+      _clientReceive.stopHeartbeatTimer();
     });
     //Check connection every 10 seconds
-    _heartbeat();
+    //_heartbeat();
+    _clientReceive.checkHeartbeat();
   }
 
   void stop() {
@@ -122,31 +126,6 @@ class LanClient {
     // Close the client socket to disconnect from the server
     socket?.destroy();
     _messageStreamController.close();
-  }
-
-  //Try to connect to server every 10 seconds to check if connection is lost.
-  void _heartbeat() {
-    Timer.periodic(const Duration(seconds: 10), (Timer timer) async {
-      if (connected) {
-        try {
-          Socket tempSock = await Socket.connect(socket!.address, 12345,
-              timeout: const Duration(milliseconds: 8000));
-          tempSock.destroy();
-        } catch (e) {
-          if (e.toString().contains("Too many open files")) {
-            //File limit is exceeded, give garbage collector some time to clean up
-            await Future.delayed(const Duration(seconds: 10));
-          } else if (!e.toString().contains("Connection refused")) {
-            if (kDebugMode) {
-              print("Periodic check (connection lost):$e");
-            }
-            //Connection is lost
-            connected = false;
-            timer.cancel();
-            ClientEvents.connectionLostEvent.broadcast();
-          }
-        }
-      }
-    });
+    _clientReceive.stopHeartbeatTimer();
   }
 }

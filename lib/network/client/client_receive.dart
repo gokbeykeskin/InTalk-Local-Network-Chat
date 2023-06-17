@@ -19,7 +19,14 @@ class ClientReceiver {
   final ClientSideEncryption clientSideEncryption;
   //Your information.
   final User user;
-  ClientReceiver({required this.user, required this.clientSideEncryption});
+  DateTime _lastHeartbeat = DateTime.now();
+  bool connected;
+
+  late Timer _heartBeatTimer;
+  ClientReceiver(
+      {required this.connected,
+      required this.user,
+      required this.clientSideEncryption});
   //MAC-Image bytes
   //This is used to keep track of the image bytes received from each client since
   //the image bytes are received in chunks.
@@ -41,7 +48,6 @@ class ClientReceiver {
   //Splits the message and calls the appropriate handler
   Future<void> _handleMessage(String message) async {
     var split = message.split("‽");
-
     //All the messages except the server intermediate key are encrypted
     //So we need to decrypt them before handling them.
     if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
@@ -54,6 +60,11 @@ class ClientReceiver {
         print("Client: Login received from ${split[2]}");
       }
       _handleLogin(split);
+    } else if (split[0] == MessagingProtocol.heartbeat) {
+      if (kDebugMode) {
+        print("Client: Heartbeat received from ${split[1]}");
+      }
+      _lastHeartbeat = DateTime.now();
     } else if (split[0] == MessagingProtocol.trustedDevice) {
       if (kDebugMode) {
         print("Client: Trusted device ${split[1]} received.");
@@ -231,7 +242,6 @@ class ClientReceiver {
       _currentImageSenders[split[2]]!.replaceRange(
           index, index + ImageUtils.chunkSize, base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
-      await Future.delayed(const Duration(milliseconds: 80));
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
           senderMac: split[2],
@@ -271,7 +281,6 @@ class ClientReceiver {
       _currentImageSenders[split[2]]!.replaceRange(
           index, index + ImageUtils.chunkSize, base64Decode(split[1]));
     } else if (split[0] == MessagingProtocol.privateImageEnd) {
-      await Future.delayed(const Duration(milliseconds: 80));
       ClientEvents.privateMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
           senderMac: split[2],
@@ -302,5 +311,24 @@ class ClientReceiver {
           .name = split[2];
       ClientEvents.usersUpdatedEvent.broadcast();
     }
+  }
+
+  void checkHeartbeat() {
+    _heartBeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (DateTime.now().difference(_lastHeartbeat) >
+          const Duration(seconds: 5)) {
+        if (kDebugMode) {
+          print("Heartbeat timed out, disconnecting.");
+        }
+        //Connection is lost
+        connected = false;
+        timer.cancel();
+        ClientEvents.connectionLostEvent.broadcast();
+      }
+    });
+  }
+
+  void stopHeartbeatTimer() {
+    _heartBeatTimer.cancel();
   }
 }

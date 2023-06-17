@@ -203,7 +203,6 @@ class _ContactsScreenState extends State<ContactsScreen>
     }
     _client = LanClient(user: User(name: widget.name));
     await _client?.start();
-
     _server = LanServer(myUser: _client!.user);
     await _server?.start();
     _client?.connect(-1);

@@ -74,7 +74,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
     if (widget.isGeneralChat) {
-      ClientEvents.broadcastMessageReceivedEvent.subscribe((args) {
+      ClientEvents.broadcastMessageReceivedEvent.subscribe((args) async {
+        await Future.delayed(const Duration(milliseconds: 10));
         if (mounted) {
           setState(() {
             messages;
@@ -82,7 +83,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
     } else {
-      ClientEvents.privateMessageReceivedEvent.subscribe((args) {
+      ClientEvents.privateMessageReceivedEvent.subscribe((args) async {
+        await Future.delayed(const Duration(milliseconds: 10));
         if (mounted) {
           setState(() {
             messages;

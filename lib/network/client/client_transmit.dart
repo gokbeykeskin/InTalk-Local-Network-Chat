@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 
 import '../../auth/user.dart';
 import '../../encrypt/client_encryption.dart';
@@ -19,7 +20,9 @@ class ClientTransmit {
 
   //send a message to general chat
   void sendBroadcastMessage(String message) {
-    print("Sending a broadcast message at time ${DateTime.now()}");
+    if (kDebugMode) {
+      print("Sending a broadcast message at time ${DateTime.now()}");
+    }
     _sendMessage(
         "${MessagingProtocol.broadcastMessage}‽${user.macAddress}‽$message");
   }

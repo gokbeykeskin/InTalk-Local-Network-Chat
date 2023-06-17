@@ -17,7 +17,7 @@ abstract class BaseEncryption {
   final BigInt n = BigInt.parse('71015449566417566598295305556981');
 
   //socket is null if client sends message to server
-  //since clien't doesn't do a key bookkeeping, it has only the server-client key.
+  //since clien't doesn't do key bookkeeping, it has only the server-client key.
   //server has a map of socket-encryption pair for each client.
   Future<String> encrypt(Socket? socket, String plainText);
   Future<String> decrypt(Socket? socket, String cipherText);

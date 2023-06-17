@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:local_chat/network/client/client_events.dart';
@@ -50,7 +51,7 @@ class LanClient {
       if (kDebugMode) {
         print(
             "Unsupported Device Type. Creating a random mac address for debug purposes:$e");
-        user.macAddress = "11223344"; //for macos debugging"
+        user.macAddress = Random().nextInt(1000000000).toString();
       }
     }
     _messageStream.listen((message) {
@@ -58,9 +59,8 @@ class LanClient {
     });
   }
 
-  // Connect to the server
-  //if lastIpDigit is -1, it will directly connect to itself
-  //(Server is running on this device)
+  // Connect to the server with given lastIpDigit
+  //if lastIpDigit is -1, it will directly connect to itself(Server is running on this device)
   Future<void> connect(int lastIpDigit) async {
     var ipAddress = lastIpDigit == -1
         ? _networkIpAdress
@@ -76,10 +76,7 @@ class LanClient {
         print('Successfully connected to the server: $ipAddress:12345');
       }
     } catch (e) {
-      if (kDebugMode) {
-        //print("Tried:$ipAddress");
-        return;
-      }
+      return;
     }
     clientTransmit = ClientTransmit(
         user: user,
@@ -116,7 +113,6 @@ class LanClient {
       _clientReceive.stopHeartbeatTimer();
     });
     //Check connection every 10 seconds
-    //_heartbeat();
     _clientReceive.checkHeartbeat();
   }
 

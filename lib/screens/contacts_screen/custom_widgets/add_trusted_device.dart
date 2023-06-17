@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:local_chat/network/server/server.dart';
 
+import '../../../network/server/server_helpers.dart';
 import '../contacts_screen.dart';
 
 // Displays the trust device bottom sheet when a new device wants to connect

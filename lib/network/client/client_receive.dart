@@ -36,10 +36,10 @@ class ClientReceiver {
   // This function parses the messages and calls handler
   void parseMessages(String message) {
     if (message.contains("◊")) {
-      var split = message.split('◊');
-      for (var i = 0; i < split.length; i++) {
-        if (split[i] != "") {
-          _handleMessage(split[i]);
+      var tokens = message.split('◊');
+      for (var i = 0; i < tokens.length; i++) {
+        if (tokens[i] != "") {
+          _handleMessage(tokens[i]);
         }
       }
     }
@@ -47,84 +47,84 @@ class ClientReceiver {
 
   //Splits the message and calls the appropriate handler
   Future<void> _handleMessage(String message) async {
-    var split = message.split("‽");
+    var tokens = message.split("‽");
     //All the messages except the server intermediate key are encrypted
     //So we need to decrypt them before handling them.
-    if (!(split[0] == MessagingProtocol.serverIntermediateKey)) {
+    if (!(tokens[0] == MessagingProtocol.serverIntermediateKey)) {
       message = await clientSideEncryption.decrypt(null, message);
-      split = message.split("‽");
+      tokens = message.split("‽");
     }
 
-    if (split[0] == MessagingProtocol.login) {
+    if (tokens[0] == MessagingProtocol.login) {
       if (kDebugMode) {
-        print("Client: Login received from ${split[2]}");
+        print("Client: Login received from ${tokens[2]}");
       }
-      _handleLogin(split);
-    } else if (split[0] == MessagingProtocol.heartbeat) {
+      _handleLogin(tokens);
+    } else if (tokens[0] == MessagingProtocol.heartbeat) {
       if (kDebugMode) {
-        print("Client: Heartbeat received from ${split[1]}");
+        print("Client: Heartbeat received from server.");
       }
       _lastHeartbeat = DateTime.now();
-    } else if (split[0] == MessagingProtocol.trustedDevice) {
+    } else if (tokens[0] == MessagingProtocol.trustedDevice) {
       if (kDebugMode) {
-        print("Client: Trusted device ${split[1]} received.");
+        print("Client: Trusted device ${tokens[1]} received.");
       }
-      _handleTrustedDevice(split[1], split[2]);
-    } else if (split[0] == MessagingProtocol.bannedDevice) {
+      _handleTrustedDevice(tokens[1], tokens[2]);
+    } else if (tokens[0] == MessagingProtocol.bannedDevice) {
       if (kDebugMode) {
-        print("Client: Banned device ${split[1]} received.");
+        print("Client: Banned device ${tokens[1]} received.");
       }
-      _handleBannedDevice(split[1], split[2]);
-    } else if (split[0] == MessagingProtocol.untrustDevice) {
+      _handleBannedDevice(tokens[1], tokens[2]);
+    } else if (tokens[0] == MessagingProtocol.untrustDevice) {
       if (kDebugMode) {
-        print("Client: Trusted device ${split[1]} received.");
+        print("Client: Trusted device ${tokens[1]} received.");
       }
-      TrustedDeviceUtils.handleUntrustedDevice(split[1]);
-    } else if (split[0] == MessagingProtocol.unbanDevice) {
+      TrustedDeviceUtils.handleUntrustedDevice(tokens[1]);
+    } else if (tokens[0] == MessagingProtocol.unbanDevice) {
       if (kDebugMode) {
-        print("Client: Banned device ${split[1]} received.");
+        print("Client: Banned device ${tokens[1]} received.");
       }
-      TrustedDeviceUtils.handleunbannedDevice(split[1]);
-    } else if (split[0] == MessagingProtocol.logout) {
+      TrustedDeviceUtils.handleunbannedDevice(tokens[1]);
+    } else if (tokens[0] == MessagingProtocol.logout) {
       if (kDebugMode) {
-        print("Client: Logout received from ${split[1]}");
+        print("Client: Logout received from ${tokens[1]}");
       }
-      _handleLogout(split);
-    } else if (split[0] == MessagingProtocol.broadcastMessage) {
+      _handleLogout(tokens);
+    } else if (tokens[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
-        print("Client: Broadcast message received from ${split[1]}");
+        print("Client: Broadcast message received from ${tokens[1]}");
       }
-      _handleBroadcastMessage(split);
-    } else if (split[0] == MessagingProtocol.privateMessage) {
+      _handleBroadcastMessage(tokens);
+    } else if (tokens[0] == MessagingProtocol.privateMessage) {
       if (kDebugMode) {
-        print("Client: Private message received from ${split[1]}");
+        print("Client: Private message received from ${tokens[1]}");
       }
-      _handlePrivateMessage(split);
-    } else if (split[0] == MessagingProtocol.broadcastImageStart ||
-        split[0] == MessagingProtocol.broadcastImageContd ||
-        split[0] == MessagingProtocol.broadcastImageEnd) {
-      _handleBroadcastImage(split);
-    } else if (split[0] == MessagingProtocol.privateImageStart ||
-        split[0] == MessagingProtocol.privateImageContd ||
-        split[0] == MessagingProtocol.privateImageEnd) {
-      _handlePrivateImage(split);
-    } else if (split[0] == MessagingProtocol.nameUpdate) {
+      _handlePrivateMessage(tokens);
+    } else if (tokens[0] == MessagingProtocol.broadcastImageStart ||
+        tokens[0] == MessagingProtocol.broadcastImageContd ||
+        tokens[0] == MessagingProtocol.broadcastImageEnd) {
+      _handleBroadcastImage(tokens);
+    } else if (tokens[0] == MessagingProtocol.privateImageStart ||
+        tokens[0] == MessagingProtocol.privateImageContd ||
+        tokens[0] == MessagingProtocol.privateImageEnd) {
+      _handlePrivateImage(tokens);
+    } else if (tokens[0] == MessagingProtocol.nameUpdate) {
       if (kDebugMode) {
-        print("Client: Name update received from ${split[1]}");
+        print("Client: Name update received from ${tokens[1]}");
       }
-      _handleNameUpdate(split);
-    } else if (split[0] == MessagingProtocol.rejected) {
+      _handleNameUpdate(tokens);
+    } else if (tokens[0] == MessagingProtocol.rejected) {
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
       ClientEvents.rejectedEvent.broadcast();
-    } else if (split[0] == MessagingProtocol.serverIntermediateKey) {
+    } else if (tokens[0] == MessagingProtocol.serverIntermediateKey) {
       if (kDebugMode) {
         print("Client: Server intermediate key received.");
       }
-      clientSideEncryption.generateFinalKey(BigInt.parse(split[1]), split[2]);
-    } else if (split[0] == MessagingProtocol.clientNumber) {
-      clientNum = int.parse(split[1]);
+      clientSideEncryption.generateFinalKey(BigInt.parse(tokens[1]), tokens[2]);
+    } else if (tokens[0] == MessagingProtocol.clientNumber) {
+      clientNum = int.parse(tokens[1]);
 
       if (kDebugMode) {
         print("Client: Number Received: $clientNum");
@@ -132,18 +132,20 @@ class ClientReceiver {
     }
   }
 
-  void _handleLogin(List<String> split) {
-    if (split[1] != user.macAddress) {
+  void _handleLogin(List<String> tokens) {
+    if (tokens[1] != user.macAddress) {
       if (kDebugMode) {
-        print("New user added: ${split[2]}");
+        print("New user added: ${tokens[2]}");
       }
       if (ContactsScreen.loggedInUsers
-          .where((element) => element.macAddress == split[1])
+          .where((element) => element.macAddress == tokens[1])
           .isEmpty) {
         ContactsScreen.loggedInUsers.add(User(
-            macAddress: split[1], name: split[2], port: int.parse(split[3])));
+            macAddress: tokens[1],
+            name: tokens[2],
+            port: int.parse(tokens[3])));
       }
-      TrustedDeviceUtils.updateTrustedDeviceNames(split[1], split[2]);
+      TrustedDeviceUtils.updateTrustedDeviceNames(tokens[1], tokens[2]);
       ClientEvents.usersUpdatedEvent.broadcast();
     }
   }
@@ -186,129 +188,130 @@ class ClientReceiver {
   }
 
 //handle when some other client logs out
-  void _handleLogout(List<String> split) {
+  void _handleLogout(List<String> tokens) {
     if (kDebugMode) {
-      print("User logged out: ${split[1]}");
+      print("User logged out: ${tokens[1]}");
     }
     ContactsScreen.loggedInUsers
-        .removeWhere((element) => element.port.toString() == split[1]);
+        .removeWhere((element) => element.port.toString() == tokens[1]);
     ClientEvents.usersUpdatedEvent.broadcast();
   }
 
-  void _handleBroadcastMessage(List<String> split) {
-    if (split[1] != user.macAddress) {
-      print("Received a broadcast message at time ${DateTime.now()}");
+  void _handleBroadcastMessage(List<String> tokens) {
+    if (tokens[1] != user.macAddress) {
+      if (kDebugMode) {
+        print("Received a broadcast message at time ${DateTime.now()}");
+      }
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
-            senderMac: split[1],
-            message: split[2], //message
+            senderMac: tokens[1],
+            message: tokens[2],
             sender: ContactsScreen.loggedInUsers
-                .firstWhere((element) => element.macAddress == split[1])
+                .firstWhere((element) => element.macAddress == tokens[1])
                 .name,
-            receiver: "General Message" //sender
-            ),
+            receiver: "General Message"),
       );
     }
   }
 
-  void _handlePrivateMessage(List<String> split) {
+  void _handlePrivateMessage(List<String> tokens) {
     ClientEvents.privateMessageReceivedEvent.broadcast(
       NewMessageEventArgs(
-          senderMac: split[1],
-          message: split[3], //message
+          senderMac: tokens[1],
+          message: tokens[3],
           sender: ContactsScreen.loggedInUsers
-              .firstWhere((element) => element.macAddress == split[1])
+              .firstWhere((element) => element.macAddress == tokens[1])
               .name,
           receiver: "Private Message"),
     );
   }
 
-  void _handleBroadcastImage(List<String> split) async {
-    if (split[0] == MessagingProtocol.broadcastImageStart) {
+  void _handleBroadcastImage(List<String> tokens) async {
+    if (tokens[0] == MessagingProtocol.broadcastImageStart) {
       if (kDebugMode) {
-        print("Broadcast image received from ${split[1]}");
+        print("Broadcast image received from ${tokens[1]}");
       }
-      _currentImageSenders[split[1]] = List.generate(
-          int.parse(split[2]) * (ImageUtils.chunkSize), (index) => 0);
-    } else if (split[0] == MessagingProtocol.broadcastImageContd) {
-      if (split[1].length % 4 > 0) {
+      _currentImageSenders[tokens[1]] = List.generate(
+          int.parse(tokens[2]) * (ImageUtils.chunkSize), (index) => 0);
+    } else if (tokens[0] == MessagingProtocol.broadcastImageContd) {
+      if (tokens[1].length % 4 > 0) {
         if (kDebugMode) {
           print("Base64 image corrupted, trying to fix it.");
         }
-        split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
+        tokens[1] += 'c' * (4 - tokens[1].length % 4); //token should be base64
       }
       //add incoming image bytes to senders list
-      int index = int.parse(split[3]) * ImageUtils.chunkSize;
-      _currentImageSenders[split[2]]!.replaceRange(
-          index, index + ImageUtils.chunkSize, base64Decode(split[1]));
-    } else if (split[0] == MessagingProtocol.broadcastImageEnd) {
+      int index = int.parse(tokens[3]) * ImageUtils.chunkSize;
+      _currentImageSenders[tokens[2]]!.replaceRange(
+          index, index + ImageUtils.chunkSize, base64Decode(tokens[1]));
+    } else if (tokens[0] == MessagingProtocol.broadcastImageEnd) {
       ClientEvents.broadcastMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
-          senderMac: split[2],
+          senderMac: tokens[2],
           //if the received hash is equal to the hash of the received image, then the image is not corrupted.
           message: listEquals(
-                  ImageUtils.hashImage(_currentImageSenders[split[2]]!),
-                  base64Decode(split[1]))
+                  ImageUtils.hashImage(_currentImageSenders[tokens[2]]!),
+                  base64Decode(tokens[1]))
               ? ''
               : 'Sent an image, but it was corrupted.',
 
-          imageBytes: _currentImageSenders[split[2]]!,
+          imageBytes: _currentImageSenders[tokens[2]]!,
           sender: ContactsScreen.loggedInUsers
-              .firstWhere((element) => element.macAddress == split[2])
+              .firstWhere((element) => element.macAddress == tokens[2])
               .name,
-          receiver: "General Message", //sender
+          receiver: "General Message",
         ),
       );
-      _currentImageSenders.remove(split[2]);
+      _currentImageSenders.remove(tokens[2]);
     }
   }
 
-  void _handlePrivateImage(List<String> split) async {
-    if (split[0] == MessagingProtocol.privateImageStart) {
+  void _handlePrivateImage(List<String> tokens) async {
+    if (tokens[0] == MessagingProtocol.privateImageStart) {
       if (kDebugMode) {
-        print("Private image received from ${split[1]}");
+        print("Private image received from ${tokens[1]}");
       }
-      _currentImageSenders[split[1]] = List.generate(
-          int.parse(split[3]) * ImageUtils.chunkSize, (index) => 0);
-    } else if (split[0] == MessagingProtocol.privateImageContd) {
-      if (split[1].length % 4 > 0) {
+      _currentImageSenders[tokens[1]] = List.generate(
+          int.parse(tokens[3]) * ImageUtils.chunkSize, (index) => 0);
+    } else if (tokens[0] == MessagingProtocol.privateImageContd) {
+      if (tokens[1].length % 4 > 0) {
         if (kDebugMode) {
           print("Base64 image corrupted, trying to fix it.");
         }
-        split[1] += 'c' * (4 - split[1].length % 4); //split should be base64
+        tokens[1] += 'c' * (4 - tokens[1].length % 4); //token should be base64
       }
-      int index = int.parse(split[4]) * ImageUtils.chunkSize;
-      _currentImageSenders[split[2]]!.replaceRange(
-          index, index + ImageUtils.chunkSize, base64Decode(split[1]));
-    } else if (split[0] == MessagingProtocol.privateImageEnd) {
+      int index = int.parse(tokens[4]) * ImageUtils.chunkSize;
+      _currentImageSenders[tokens[2]]!.replaceRange(
+          index, index + ImageUtils.chunkSize, base64Decode(tokens[1]));
+    } else if (tokens[0] == MessagingProtocol.privateImageEnd) {
       ClientEvents.privateMessageReceivedEvent.broadcast(
         NewMessageEventArgs(
-          senderMac: split[2],
+          senderMac: tokens[2],
           message: listEquals(
-                  ImageUtils.hashImage(_currentImageSenders[split[2]]!),
-                  base64Decode(split[1]))
+                  ImageUtils.hashImage(_currentImageSenders[tokens[2]]!),
+                  base64Decode(tokens[1]))
               ? ''
               : 'Sent an image, but it was corrupted.',
-          imageBytes: _currentImageSenders[split[2]]!,
+          imageBytes: _currentImageSenders[tokens[2]]!,
           sender: ContactsScreen.loggedInUsers
-              .firstWhere((element) => element.macAddress == split[2])
+              .firstWhere((element) => element.macAddress == tokens[2])
               .name,
-          receiver: "Private Message", //sender
+          receiver: "Private Message",
         ),
       );
-      _currentImageSenders.remove(split[2]);
+      _currentImageSenders.remove(tokens[2]);
     }
   }
 
-  void _handleNameUpdate(List<String> split) {
-    if (split[1] != user.macAddress) {
+  void _handleNameUpdate(List<String> tokens) {
+    if (tokens[1] != user.macAddress) {
       if (kDebugMode) {
-        print("Name update received from ${split[1]}");
+        print("Name update received from ${tokens[1]}");
       }
-      TrustedDeviceUtils.updateTrustedDeviceNames(split[1], split[2]);
+      TrustedDeviceUtils.updateTrustedDeviceNames(tokens[1], tokens[2]);
       ContactsScreen.loggedInUsers
-          .firstWhere((element) => element.macAddress == split[1])
-          .name = split[2];
+          .firstWhere((element) => element.macAddress == tokens[1])
+          .name = tokens[2];
       ClientEvents.usersUpdatedEvent.broadcast();
     }
   }

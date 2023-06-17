@@ -15,6 +15,7 @@ import 'package:local_chat/screens/home_screen/home_screen.dart';
 import 'package:local_chat/screens/settings_screen/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/user.dart';
+import '../../network/server/server_helpers.dart';
 import '../../utils/image_utils.dart';
 import 'custom_widgets/contact.dart';
 
@@ -65,6 +66,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   @override
   void dispose() {
+    print("Contacts Screen disposed");
     _logout();
     super.dispose();
     _tabController.dispose();

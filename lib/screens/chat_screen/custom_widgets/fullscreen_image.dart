@@ -36,8 +36,7 @@ class _FullScreenImageState extends State<FullScreenImage> {
         ],
       ),
       body: PhotoView(
-        imageProvider:
-            FileImage(File(widget.imageFile.path)), //widget.imageFile,
+        imageProvider: FileImage(File(widget.imageFile.path)),
         backgroundDecoration: const BoxDecoration(color: Colors.black),
         gaplessPlayback: false,
         customSize: MediaQuery.of(context).size,

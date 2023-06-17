@@ -5,27 +5,13 @@ import 'dart:async';
 import 'package:event/event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:local_chat/network/client/client_events.dart';
+import 'package:local_chat/network/server/server_helpers.dart';
 import 'package:local_chat/screens/contacts_screen/contacts_screen.dart';
 
 import '../../auth/user.dart';
 import '../../encrypt/server_encryption.dart';
 import '../messaging_protocol.dart';
 import '../../utils/lan_utils.dart';
-
-//AuthEvent is broadcasted when a new device wants to connect to the server
-class AuthEventArgs extends EventArgs {
-  String macAddress;
-  String name;
-  AuthEventArgs({required this.macAddress, required this.name});
-}
-
-class CustomStreamController {
-  final StreamController<String> _messageStreamController =
-      StreamController.broadcast();
-  Stream<String> get _messageStream => _messageStreamController.stream;
-  Socket socket;
-  CustomStreamController({required this.socket});
-}
 
 class LanServer {
   // server socket that listens for incoming client connections
@@ -35,7 +21,7 @@ class LanServer {
   //the user which logged in from this device.
   final User _myUser;
 
-  late Timer _hearbeatTimer;
+  Timer? _hearbeatTimer;
 
   LanServer({required User myUser}) : _myUser = myUser;
 
@@ -61,7 +47,7 @@ class LanServer {
 
     // Print the IP address to the console
     if (kDebugMode) {
-      print('Local IP address: $ipAddress');
+      print('LAN IP address: $ipAddress');
     }
 
     ContactsScreen.userAcceptanceEvent.subscribe((args) {
@@ -88,7 +74,7 @@ class LanServer {
       // Add the socket to the list of connected sockets
       _messageStreamControllers.add(CustomStreamController(socket: socket));
 
-      _messageStreamControllers.last._messageStream.listen((message) {
+      _messageStreamControllers.last.messageStream.listen((message) {
         _parseMessages(message, socket);
       });
       // Listen for incoming messages from the client
@@ -98,15 +84,16 @@ class LanServer {
 
         _messageStreamControllers
             .firstWhere((element) => element.socket == socket)
-            ._messageStreamController
+            .messageStreamController
             .add(message);
       }, onDone: () {
-        //when a client closes a socket
-        // Remove the socket from the list of connected sockets
-        //send the logout message to all clients
         try {
+          //when a client closes a socket
+          // Remove the socket from the list of connected sockets
+          //send the logout message to all clients except the closed socket
           _sendMessageToAllExcept(
               '${MessagingProtocol.logout}‽${socket.remotePort}', socket);
+          //decrease the client number of all clients which have a higher client number
           for (var connectedSocket in _connectedClients.keys) {
             if (_connectedClients[connectedSocket]! >
                 _connectedClients[socket]!) {
@@ -135,20 +122,19 @@ class LanServer {
     }
     authEvent.unsubscribeAll();
     rejectEvent.unsubscribeAll();
-    _hearbeatTimer.cancel();
     // Close the server socket to stop accepting new client connections
     await _serverSocket?.close();
 
-    //List<Future<void>> socketFutures = [];
     // Close all existing client connections
     for (var clientSocket in _connectedClients.keys.toList()) {
       clientSocket.destroy();
     }
     _connectedClients.clear();
     for (var element in _messageStreamControllers) {
-      element._messageStreamController.close();
+      element.messageStreamController.close();
     }
     _messageStreamControllers.clear();
+    _hearbeatTimer?.cancel();
   }
 
   void _sendMessageToAllExcept(String message, Socket socket) {
@@ -203,58 +189,58 @@ class LanServer {
   // Parse incoming messages
   void _parseMessages(String message, Socket socket) async {
     if (message.contains("◊")) {
-      var splits = message.split("◊");
-      for (var split in splits) {
-        _processMessage(split, socket);
+      var tokens = message.split("◊");
+      for (var token in tokens) {
+        _processMessage(token, socket);
       }
     }
   }
 
   // Process parsed messages
   void _processMessage(String message, Socket socket) async {
-    var split = message.split("‽");
+    var tokens = message.split("‽");
     //All messages except login messages are encrypted
     //so we need to decrypt them
-    if (!(split[0] == MessagingProtocol.login)) {
+    if (!(tokens[0] == MessagingProtocol.login)) {
       message = (await serverSideEncryption.decrypt(socket, message)).trim();
-      split = message.split("‽");
+      tokens = message.split("‽");
     }
 
-    if (split[0] == MessagingProtocol.login) {
+    if (tokens[0] == MessagingProtocol.login) {
       if (kDebugMode) {
-        print("Server: Login received from ${split[2]}");
+        print("Server: Login received from ${tokens[2]}");
       }
-      serverSideEncryption.generateKeyWithClient(
-          socket, BigInt.parse(split[4]));
       _processLogin(message, socket);
-    } else if (split[0] == MessagingProtocol.broadcastMessage) {
+    } else if (tokens[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
-        print("Server: broadcast message received from ${split[1]}");
+        print("Server: broadcast message received from ${tokens[1]}");
       }
       _processBroadcastMessage(message, socket);
-    } else if (split[0] == MessagingProtocol.privateMessage) {
+    } else if (tokens[0] == MessagingProtocol.privateMessage) {
       if (kDebugMode) {
-        print("Server: private message received from ${split[1]}");
+        print("Server: private message received from ${tokens[1]}");
       }
       _processPrivateMessage(message, socket);
-    } else if (split[0] == MessagingProtocol.broadcastImageStart ||
-        split[0] == MessagingProtocol.broadcastImageContd ||
-        split[0] == MessagingProtocol.broadcastImageEnd) {
+    } else if (tokens[0] == MessagingProtocol.broadcastImageStart ||
+        tokens[0] == MessagingProtocol.broadcastImageContd ||
+        tokens[0] == MessagingProtocol.broadcastImageEnd) {
       _processBroadcastImage(message, socket);
-    } else if (split[0] == MessagingProtocol.privateImageStart ||
-        split[0] == MessagingProtocol.privateImageContd ||
-        split[0] == MessagingProtocol.privateImageEnd) {
+    } else if (tokens[0] == MessagingProtocol.privateImageStart ||
+        tokens[0] == MessagingProtocol.privateImageContd ||
+        tokens[0] == MessagingProtocol.privateImageEnd) {
       _processPrivateImage(message, socket);
-    } else if (split[0] == MessagingProtocol.nameUpdate) {
+    } else if (tokens[0] == MessagingProtocol.nameUpdate) {
       if (kDebugMode) {
-        print("Server: name update received from ${split[1]}");
+        print("Server: name update received from ${tokens[1]}");
       }
       _processNameUpdate(message, socket);
     }
   }
 
   Future<void> _processLogin(String message, Socket socket) async {
-    var split = message.split("‽");
+    var tokens = message.split("‽");
+    serverSideEncryption.generateKeyWithClient(socket, BigInt.parse(tokens[4]));
+
     List<String>? trustedDeviceMACs = ContactsScreen.trustedDevicePreferences
             ?.getStringList('trustedDeviceMACs') ??
         [];
@@ -267,12 +253,13 @@ class LanServer {
     List<String>? bannedDeviceNames = ContactsScreen.trustedDevicePreferences
             ?.getStringList('bannedDeviceNames') ??
         [];
-    if (bannedDeviceMACs.contains(split[1])) {
+    if (bannedDeviceMACs.contains(tokens[1])) {
       _kickUser(socket);
       return;
-    } else if (!trustedDeviceMACs.contains(split[1]) &&
-        split[1] != _myUser.macAddress) {
-      authEvent.broadcast(AuthEventArgs(macAddress: split[1], name: split[2]));
+    } else if (!trustedDeviceMACs.contains(tokens[1]) &&
+        tokens[1] != _myUser.macAddress) {
+      authEvent
+          .broadcast(AuthEventArgs(macAddress: tokens[1], name: tokens[2]));
 
       //wait until host user accepts or rejects the new client
       while (_isUserAccepted == null) {
@@ -281,7 +268,7 @@ class LanServer {
                 500)); // wait for 500 milliseconds before checking again
       }
       if (!_isUserAccepted!) {
-        sendBannedDeviceToAll(split[1], split[2]);
+        sendBannedDeviceToAll(tokens[1], tokens[2]);
         _kickUser(socket);
         return;
       }
@@ -299,7 +286,7 @@ class LanServer {
         //send yourself to the new client since it is not in the list of logged in clients
         '${MessagingProtocol.login}‽${_myUser.macAddress}‽${_myUser.name}‽${_myUser.port}',
         socket);
-    sendTrustedDeviceToAll(split[1], split[2]);
+    sendTrustedDeviceToAll(tokens[1], tokens[2]);
     //send all trusted devices to the new client
     for (int i = 0; i < trustedDeviceMACs.length; i++) {
       _sendMessage(
@@ -330,8 +317,8 @@ class LanServer {
 
   // Private message, send it to the specified client
   void _processPrivateMessage(String message, Socket socket) {
-    var split = message.split("‽");
-    _sendMessageToPort(message, int.parse(split[2]));
+    var tokens = message.split("‽");
+    _sendMessageToPort(message, int.parse(tokens[2]));
   }
 
   // Part of a broadcast image, send it to all clients except the sender
@@ -341,11 +328,11 @@ class LanServer {
 
   //Part of a private image, send it to the specified client
   void _processPrivateImage(String message, Socket socket) {
-    var split = message.split("‽");
-    if (split[0] == MessagingProtocol.privateImageStart) {
-      _sendMessageToPort(message, int.parse(split[2]));
+    var tokens = message.split("‽");
+    if (tokens[0] == MessagingProtocol.privateImageStart) {
+      _sendMessageToPort(message, int.parse(tokens[2]));
     } else {
-      _sendMessageToPort(message, int.parse(split[3]));
+      _sendMessageToPort(message, int.parse(tokens[3]));
     }
   }
 

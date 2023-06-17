@@ -11,6 +11,9 @@ class LanUtils {
     } else if (Platform.isAndroid) {
       var androidDeviceInfo = await deviceInfo.androidInfo;
       return androidDeviceInfo.androidId; // unique ID on Android
+    } else if (Platform.isMacOS) {
+      var macOSDeviceInfo = await deviceInfo.macOsInfo;
+      return macOSDeviceInfo.systemGUID;
     }
     return null;
   }

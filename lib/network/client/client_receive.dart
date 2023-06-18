@@ -117,6 +117,7 @@ class ClientReceiver {
       if (kDebugMode) {
         print("Client: Server Rejected the connection.");
       }
+
       ClientEvents.rejectedEvent.broadcast();
     } else if (tokens[0] == MessagingProtocol.serverIntermediateKey) {
       if (kDebugMode) {
@@ -164,6 +165,12 @@ class ClientReceiver {
           ?.setStringList('trustedDeviceMACs', trustedDeviceMACs);
       ContactsScreen.trustedDevicePreferences
           ?.setStringList('trustedDeviceNames', trustedDeviceNames);
+    } else if (trustedDeviceMACs.contains(macAddress) &&
+        !trustedDeviceNames.contains(userName)) {
+      //if a known device tries to connect with a different name update the name
+      trustedDeviceNames[trustedDeviceMACs.indexOf(macAddress)] = userName;
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('trustedDeviceNames', trustedDeviceNames);
     }
     ClientEvents.usersUpdatedEvent.broadcast();
   }
@@ -181,6 +188,12 @@ class ClientReceiver {
       bannedDeviceNames.add(userName);
       ContactsScreen.trustedDevicePreferences
           ?.setStringList('bannedDeviceMACs', bannedDeviceMACs);
+      ContactsScreen.trustedDevicePreferences
+          ?.setStringList('bannedDeviceNames', bannedDeviceNames);
+    } else if (bannedDeviceMACs.contains(macAddress) &&
+        !bannedDeviceNames.contains(userName)) {
+      //if a known device tries to connect with a different name update the name
+      bannedDeviceNames[bannedDeviceMACs.indexOf(macAddress)] = userName;
       ContactsScreen.trustedDevicePreferences
           ?.setStringList('bannedDeviceNames', bannedDeviceNames);
     }

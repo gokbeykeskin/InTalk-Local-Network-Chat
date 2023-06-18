@@ -66,7 +66,6 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   @override
   void dispose() {
-    print("Contacts Screen disposed");
     _logout();
     super.dispose();
     _tabController.dispose();
@@ -241,6 +240,7 @@ class _ContactsScreenState extends State<ContactsScreen>
   void _logout() async {
     ContactsScreen.loggedInUsers.clear();
     ClientEvents.connectionLostEvent.unsubscribeAll();
+    _client?.stop();
     if (_server != null) {
       await _server?.stop();
       _server = null;
@@ -249,7 +249,6 @@ class _ContactsScreenState extends State<ContactsScreen>
         print("There is no server instance to stop.");
       }
     }
-    _client?.stop();
   }
 
   //Most of the job is done in the ContactScreen because it is the one that

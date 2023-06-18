@@ -164,10 +164,16 @@ class LanServer {
   }
 
   void _sendMessageToPort(String message, int port) {
-    Socket socket = _connectedClients.keys.firstWhere((element) {
-      return element.remotePort == port;
-    });
-    _sendMessage(message, socket);
+    try {
+      Socket socket = _connectedClients.keys.firstWhere((element) {
+        return element.remotePort == port;
+      });
+      _sendMessage(message, socket);
+    } catch (e) {
+      if (kDebugMode) {
+        print("Server: Could not find socket with port $port");
+      }
+    }
   }
 
   void sendTrustedDeviceToAll(String macAddress, String name) {
@@ -255,6 +261,13 @@ class LanServer {
             ?.getStringList('bannedDeviceNames') ??
         [];
     if (bannedDeviceMACs.contains(tokens[1])) {
+      if (!bannedDeviceNames.contains(tokens[2])) {
+        //if a known device tries to connect with a different name update the name
+        bannedDeviceNames[bannedDeviceMACs.indexOf(tokens[1])] = tokens[2];
+        ContactsScreen.trustedDevicePreferences
+            ?.setStringList('bannedDeviceNames', bannedDeviceNames);
+      }
+      ClientEvents.usersUpdatedEvent.broadcast();
       _kickUser(socket);
       return;
     } else if (!trustedDeviceMACs.contains(tokens[1]) &&
@@ -347,9 +360,17 @@ class LanServer {
     _sendMessage('${MessagingProtocol.rejected}‽', socket);
     await Future.delayed(const Duration(milliseconds: 200));
     _isUserAccepted = null;
+    await socket.close();
     socket.destroy();
     _connectedClients.remove(socket);
     rejectEvent.broadcast();
+  }
+
+  void kickUser(int port) {
+    Socket socket = _connectedClients.keys.firstWhere((element) {
+      return element.remotePort == port;
+    });
+    _kickUser(socket);
   }
 
   void _heartbeat() {

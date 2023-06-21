@@ -96,7 +96,8 @@ class LanServer {
           //decrease the client number of all clients which have a higher client number
           for (var connectedSocket in _connectedClients.keys) {
             if (_connectedClients[connectedSocket]! >
-                _connectedClients[socket]!) {
+                    _connectedClients[socket]! &&
+                _connectedClients[socket]! > 0) {
               _connectedClients[connectedSocket] =
                   _connectedClients[connectedSocket]! - 1;
               _sendMessage(

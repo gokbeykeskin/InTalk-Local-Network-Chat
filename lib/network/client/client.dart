@@ -20,8 +20,8 @@ class LanClient {
   late String _networkIpAdress;
   late String _networkIpWithoutLastDigits;
   late BigInt _intermediateKey;
-  late ClientTransmitter clientTransmit;
-  late ClientReceiver _clientReceive;
+  ClientTransmitter? clientTransmit;
+  ClientReceiver? _clientReceive;
 
   ClientSideEncryption clientSideEncryption = ClientSideEncryption();
 
@@ -55,7 +55,7 @@ class LanClient {
       }
     }
     _messageStream.listen((message) {
-      _clientReceive.parseMessages(message);
+      _clientReceive?.parseMessages(message);
     });
   }
 
@@ -83,24 +83,32 @@ class LanClient {
         socket: socket!,
         clientSideEncryption: clientSideEncryption);
     _clientReceive = ClientReceiver(
-        user: user,
-        clientSideEncryption: clientSideEncryption,
-        connected: isConnected);
+      user: user,
+      clientSideEncryption: clientSideEncryption,
+      connected: isConnected,
+    );
     _intermediateKey = clientSideEncryption.generateIntermediateKey();
     //send login to server
-    clientTransmit.sendOpenMessage(
+    clientTransmit?.sendOpenMessage(
         "${MessagingProtocol.login}‽${user.macAddress}‽${user.name}‽${socket!.port}‽$_intermediateKey");
     // Listen for incoming messages from the server
     socket!.listen((data) {
       // Convert the incoming data to a string
       var message = utf8.decode(data).trim();
-      _messageStreamController.add(message);
+      try {
+        _messageStreamController.add(message);
+      } catch (e) {
+        socket?.close();
+        socket?.destroy();
+      }
     }).onDone(() {
       //When server is closed, if you are the next candidate , you will become server.
       //otherwise you will connect to new server.
       try {
-        _clientReceive.clientNum -= 1;
-        if (_clientReceive.clientNum <= 0) {
+        //_clientReceive?.clientNum -= 1;
+        print(
+            "Server Socket closed. New client number:${_clientReceive?.clientNum}");
+        if (_clientReceive!.clientNum <= 1) {
           ClientEvents.becomeServerEvent.broadcast();
         } else {
           ClientEvents.connectToNewServerEvent.broadcast();
@@ -110,18 +118,22 @@ class LanClient {
           print("Client is kicked.");
         }
       }
-      _clientReceive.stopHeartbeatTimer();
+      _clientReceive?.stopHeartbeatTimer();
+      clientTransmit?.stopHeartbeatTimer();
     });
     //Check connection every 10 seconds
-    _clientReceive.checkHeartbeat();
+    _clientReceive?.checkHeartbeat();
+    clientTransmit?.heartbeat();
   }
 
-  void stop() {
+  void stop() async {
     isConnected = false;
     ClientEvents.stop();
     // Close the client socket to disconnect from the server
+    await socket?.close();
     socket?.destroy();
     _messageStreamController.close();
-    _clientReceive.stopHeartbeatTimer();
+    _clientReceive?.stopHeartbeatTimer();
+    clientTransmit?.stopHeartbeatTimer();
   }
 }

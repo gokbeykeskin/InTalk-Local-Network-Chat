@@ -139,25 +139,29 @@ class _ContactsScreenState extends State<ContactsScreen>
   }
 
   _createContactsTab() {
-    return Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                  itemCount: ContactsScreen.loggedInUsers.length,
-                  itemBuilder: (context, index) {
-                    User user = ContactsScreen.loggedInUsers[index];
-                    return Contact(
-                        name: user.name,
-                        port: user.port!,
-                        client: _client!,
-                        index: index);
-                  }),
-            )
-          ],
-        ));
+    try {
+      return Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                    itemCount: ContactsScreen.loggedInUsers.length,
+                    itemBuilder: (context, index) {
+                      User user = ContactsScreen.loggedInUsers[index];
+                      return Contact(
+                          name: user.name,
+                          port: user.port!,
+                          client: _client!,
+                          index: index);
+                    }),
+              )
+            ],
+          ));
+    } catch (e) {
+      _noConnection();
+    }
   }
 
 //tries to connect to a server. If there is no server, it will establish a server and connect to it.
@@ -202,18 +206,22 @@ class _ContactsScreenState extends State<ContactsScreen>
         ContactsScreen.loggedInUsers.clear();
       });
     }
+    _server?.stop();
     _client = LanClient(user: User(name: widget.name));
     await _client?.start();
     _server = LanServer(myUser: _client!.user);
     await _server?.start();
-    _client?.connect(-1);
+    await _client?.connect(-1);
+    if (!_client!.isConnected) {
+      _noConnection();
+    }
   }
 
   //When server logs out and you are not the first candidate to become the
   //new server, this method is called.
   void _connectToNewServer() async {
     //Give the server some time to start.
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future.delayed(const Duration(milliseconds: 200));
     if (mounted) {
       setState(() {
         ContactsScreen.loggedInUsers.clear();
@@ -223,6 +231,9 @@ class _ContactsScreenState extends State<ContactsScreen>
     await _client?.start();
 
     await _tryConnections(_client!);
+    if (!_client!.isConnected && mounted) {
+      _noConnection();
+    }
   }
 
   //tries to connect to each ip in the subnet.
@@ -280,7 +291,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.jpeg');
+        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.heic');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }
@@ -300,7 +311,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       args as NewMessageEventArgs;
       File? file;
       if (args.imageBytes != null) {
-        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.jpeg');
+        file = File('$_localPath/${ImageUtils.generateRandomString(5)}.heic');
         await file.create();
         file.writeAsBytesSync(args.imageBytes!);
       }
@@ -334,6 +345,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     );
     //When you are rejected by the host, this event is broadcasted.
     ClientEvents.rejectedEvent.subscribe((args) {
+      _logout();
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (context) => const HomeScreen()));
       showDialog(
@@ -356,7 +368,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     SettingsScreen.nameChangedEvent.subscribe((args) {
       args as NameChangedEventArgs;
       widget.name = args.name;
-      _client?.clientTransmit.changeName(args.name);
+      _client?.clientTransmit?.changeName(args.name);
     });
   }
 

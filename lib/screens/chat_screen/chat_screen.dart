@@ -185,10 +185,10 @@ class _ChatScreenState extends State<ChatScreen> {
               }
 
               if (widget.isGeneralChat) {
-                widget.meClient.clientTransmit.sendBroadcastMessage(value);
+                widget.meClient.clientTransmit?.sendBroadcastMessage(value);
               } else {
                 widget.meClient.clientTransmit
-                    .sendPrivateMessage(value, widget.receiver);
+                    ?.sendPrivateMessage(value, widget.receiver);
               }
               if (value.isNotEmpty) {
                 textFieldController.clear();
@@ -228,13 +228,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ContactsScreen.ongoingImageSend = true;
         });
       }
-      img = await ImageUtils.compressImage(img, '${img.path}compressed.jpeg');
+      if (Platform.isIOS) {
+        img = await ImageUtils.compressImage(img, '${img.path}compressed.heic');
+      } else if (Platform.isAndroid) {
+        img = await ImageUtils.compressImage(img, '${img.path}compressed.jpeg');
+      }
       if (widget.isGeneralChat) {
         await widget.meClient.clientTransmit
-            .sendBroadcastImage(img.readAsBytesSync());
+            ?.sendBroadcastImage(img.readAsBytesSync());
       } else {
         await widget.meClient.clientTransmit
-            .sendPrivateImage(img.readAsBytesSync(), widget.receiver);
+            ?.sendPrivateImage(img.readAsBytesSync(), widget.receiver);
       }
       if (mounted && context.mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();

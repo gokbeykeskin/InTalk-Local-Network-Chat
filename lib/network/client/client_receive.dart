@@ -126,9 +126,8 @@ class ClientReceiver {
       clientSideEncryption.generateFinalKey(BigInt.parse(tokens[1]), tokens[2]);
     } else if (tokens[0] == MessagingProtocol.clientNumber) {
       clientNum = int.parse(tokens[1]);
-
       if (kDebugMode) {
-        print("Client: Number Received: $clientNum");
+        print("Client Number Update From Server: $clientNum");
       }
     }
   }
@@ -330,21 +329,27 @@ class ClientReceiver {
   }
 
   void checkHeartbeat() {
-    _heartBeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _heartBeatTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (DateTime.now().difference(_lastHeartbeat) >
-          const Duration(seconds: 5)) {
+          const Duration(seconds: 2)) {
         if (kDebugMode) {
           print("Heartbeat timed out, disconnecting.");
         }
-        //Connection is lost
         connected = false;
         timer.cancel();
-        ClientEvents.connectionLostEvent.broadcast();
+        if (clientNum > 1) {
+          ClientEvents.connectToNewServerEvent.broadcast();
+        } else {
+          ClientEvents.becomeServerEvent.broadcast();
+        }
       }
     });
   }
 
   void stopHeartbeatTimer() {
+    if (kDebugMode) {
+      print("Receiver Timer canceled!");
+    }
     _heartBeatTimer.cancel();
   }
 }

@@ -35,16 +35,16 @@ class ImageUtils {
   }
 
   static Future<File> compressImage(File file, String targetPath) async {
-    const int quality = 10;
+    const int quality = 25;
     XFile? result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
       quality: quality,
+      format: Platform.isIOS ? CompressFormat.heic : CompressFormat.jpeg,
     );
 
     if (kDebugMode) {
       print("Before compression:${file.lengthSync()}");
-      print("After compression:${result!.length}");
     }
     return File(result!.path);
   }

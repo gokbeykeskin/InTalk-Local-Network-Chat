@@ -13,10 +13,13 @@ class ClientTransmitter {
   ClientSideEncryption clientSideEncryption;
   User user;
   Socket socket;
-  ClientTransmitter(
-      {required this.user,
-      required this.socket,
-      required this.clientSideEncryption});
+
+  Timer? _heartbeatTimer;
+  ClientTransmitter({
+    required this.user,
+    required this.socket,
+    required this.clientSideEncryption,
+  });
 
   //send a message to general chat
   void sendBroadcastMessage(String message) {
@@ -41,7 +44,7 @@ class ClientTransmitter {
         "${MessagingProtocol.broadcastImageStart}‽${user.macAddress}‽${bytes.length}");
     for (var i = 0; i < bytes.length; i++) {
       await Future.delayed(
-        const Duration(milliseconds: 50),
+        const Duration(milliseconds: 40),
       );
       await _sendMessage(
           '${MessagingProtocol.broadcastImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}‽$i');
@@ -58,7 +61,7 @@ class ClientTransmitter {
         "${MessagingProtocol.privateImageStart}‽${user.macAddress}‽${receiver.port}‽${bytes.length}");
     for (var i = 0; i < bytes.length; i++) {
       await Future.delayed(
-        const Duration(milliseconds: 50),
+        const Duration(milliseconds: 40),
       );
       await _sendMessage(
           '${MessagingProtocol.privateImageContd}‽${base64Encode(bytes[i])}‽${user.macAddress}‽${receiver.port}‽$i');
@@ -83,5 +86,16 @@ class ClientTransmitter {
   // Send a message to the server without encrypting (for key exchange)
   void sendOpenMessage(String message) {
     socket.write('$message◊');
+  }
+
+  void heartbeat() {
+    _heartbeatTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      _sendMessage('${MessagingProtocol.heartbeat}‽${user.port}');
+    });
+  }
+
+  void stopHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
   }
 }

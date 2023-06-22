@@ -21,7 +21,11 @@ class LanServer {
   //the user which logged in from this device.
   final User _myUser;
 
-  Timer? _hearbeatTimer;
+  Timer? _sendHeartbeatTimer;
+  Timer? _receiveHeartbeatTimer;
+
+  //port, last heartbeat time
+  final Map<Socket, DateTime> _lastHeartbeats = {};
 
   LanServer({required User myUser}) : _myUser = myUser;
 
@@ -67,6 +71,7 @@ class LanServer {
       return;
     }
     _heartbeat();
+    _checkHeartbeat();
     // Listen for incoming client connections
     _serverSocket?.listen((socket) {
       _connectedClients[socket] = _connectedClients.length;
@@ -87,31 +92,10 @@ class LanServer {
             .messageStreamController
             .add(message);
       }, onDone: () {
-        try {
-          //when a client closes a socket
-          // Remove the socket from the list of connected sockets
-          //send the logout message to all clients except the closed socket
-          _sendMessageToAllExcept(
-              '${MessagingProtocol.logout}‽${socket.remotePort}', socket);
-          //decrease the client number of all clients which have a higher client number
-          for (var connectedSocket in _connectedClients.keys) {
-            if (_connectedClients[connectedSocket]! >
-                    _connectedClients[socket]! &&
-                _connectedClients[socket]! > 0) {
-              _connectedClients[connectedSocket] =
-                  _connectedClients[connectedSocket]! - 1;
-              _sendMessage(
-                  '${MessagingProtocol.clientNumber}‽${_connectedClients[connectedSocket]}',
-                  connectedSocket);
-            }
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print(
-                "Server was the logged out client. No need to send logout message to other clients");
-          }
-        }
-        _connectedClients.remove(socket);
+        //when a client closes a socket
+        // Remove the socket from the list of connected sockets
+        //send the logout message to all clients except the closed socket
+        _handleLogout(socket);
       });
     });
   }
@@ -135,7 +119,8 @@ class LanServer {
       element.messageStreamController.close();
     }
     _messageStreamControllers.clear();
-    _hearbeatTimer?.cancel();
+    _sendHeartbeatTimer?.cancel();
+    _receiveHeartbeatTimer?.cancel();
   }
 
   void _sendMessage(String message, Socket socket) async {
@@ -218,6 +203,11 @@ class LanServer {
         print("Server: Login received from ${tokens[2]}");
       }
       _processLogin(message, socket);
+    } else if (tokens[0] == MessagingProtocol.heartbeat) {
+      if (kDebugMode) {
+        print("Client: Heartbeat received from server.");
+      }
+      _lastHeartbeats[socket] = DateTime.now();
     } else if (tokens[0] == MessagingProtocol.broadcastMessage) {
       if (kDebugMode) {
         print("Server: broadcast message received from ${tokens[1]}");
@@ -268,6 +258,7 @@ class LanServer {
         ContactsScreen.trustedDevicePreferences
             ?.setStringList('bannedDeviceNames', bannedDeviceNames);
       }
+      sendBannedDeviceToAll(tokens[1], tokens[2]);
       ClientEvents.usersUpdatedEvent.broadcast();
       _kickUser(socket);
       return;
@@ -374,9 +365,64 @@ class LanServer {
     _kickUser(socket);
   }
 
+  //send heartbeat to all clients
   void _heartbeat() {
-    _hearbeatTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _sendMessageToAll('${MessagingProtocol.heartbeat}‽');
+    _sendHeartbeatTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      _sendMessageToAll(MessagingProtocol.heartbeat);
     });
+  }
+
+  //check heartbeats of all clients
+  void _checkHeartbeat() {
+    _receiveHeartbeatTimer =
+        Timer.periodic(const Duration(seconds: 2), (timer) {
+      var keysToRemove = [];
+
+      for (var socket in _lastHeartbeats.keys) {
+        if (DateTime.now().difference(_lastHeartbeats[socket]!) >
+            const Duration(seconds: 2)) {
+          if (kDebugMode) {
+            print("Heartbeat timed out, removing user.");
+          }
+
+          _handleLogout(socket);
+          keysToRemove.add(socket);
+        }
+      }
+      for (var socket in keysToRemove) {
+        _lastHeartbeats.remove(socket);
+      }
+    });
+  }
+
+  void _handleLogout(Socket loggedOutSocket) {
+    try {
+      //when a client closes a socket
+      // Remove the socket from the list of connected sockets
+      //send the logout message to all clients except the closed socket
+      _sendMessageToAllExcept(
+          '${MessagingProtocol.logout}‽${loggedOutSocket.remotePort}',
+          loggedOutSocket);
+      //decrease the client number of all clients which have a higher client number
+      for (var connectedSocket in _connectedClients.keys) {
+        if (_connectedClients[connectedSocket]! >
+                _connectedClients[loggedOutSocket]! &&
+            _connectedClients[loggedOutSocket]! > 0) {
+          _connectedClients[connectedSocket] =
+              _connectedClients[connectedSocket]! - 1;
+          _sendMessage(
+              '${MessagingProtocol.clientNumber}‽${_connectedClients[connectedSocket]}',
+              connectedSocket);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print(
+            "Server was the logged out client. No need to send logout message to other clients");
+      }
+    }
+
+    _connectedClients.remove(loggedOutSocket);
   }
 }

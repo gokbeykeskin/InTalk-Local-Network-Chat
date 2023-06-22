@@ -1,4 +1,5 @@
 import 'package:event/event.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:local_chat/network/client/client_events.dart';
 import '../../network/server/server.dart';
@@ -241,13 +242,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _removeDeviceFromTrustedList(String deviceMAC, String username) {
     widget.server?.sendUntrustedDeviceToAll(deviceMAC);
-    try {
-      widget.server?.kickUser(ContactsScreen.loggedInUsers
-          .firstWhere((element) => element.macAddress == deviceMAC)
-          .port!);
-    } catch (e) {
-      //untrusted device is not online.
-    }
+    // try {
+    //   widget.server?.kickUser(ContactsScreen.loggedInUsers
+    //       .firstWhere((element) => element.macAddress == deviceMAC)
+    //       .port!);
+    //   ContactsScreen.loggedInUsers.removeWhere(
+    //       (element) => element.macAddress == deviceMAC); //remove from list
+    // } catch (e) {
+    //   //untrusted device is not online.
+    //   if (kDebugMode) {
+    //     print("Untrusted Device is not online($e)");
+    //   }
+    // }
 
     setState(
       () {

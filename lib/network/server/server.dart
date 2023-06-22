@@ -376,12 +376,12 @@ class LanServer {
   //check heartbeats of all clients
   void _checkHeartbeat() {
     _receiveHeartbeatTimer =
-        Timer.periodic(const Duration(seconds: 2), (timer) {
+        Timer.periodic(const Duration(seconds: 3), (timer) {
       var keysToRemove = [];
 
       for (var socket in _lastHeartbeats.keys) {
         if (DateTime.now().difference(_lastHeartbeats[socket]!) >
-            const Duration(seconds: 2)) {
+            const Duration(seconds: 3)) {
           if (kDebugMode) {
             print("Heartbeat timed out, removing user.");
           }

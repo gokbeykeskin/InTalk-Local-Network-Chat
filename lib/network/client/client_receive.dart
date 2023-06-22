@@ -15,7 +15,7 @@ import 'client_events.dart';
 class ClientReceiver {
   //for handling access point transfers. When server quits 1st client becomes server
   //and the rest of the clients connect to the new server.
-  late int clientNum;
+  int? clientNum;
   final ClientSideEncryption clientSideEncryption;
   //Your information.
   final User user;
@@ -329,15 +329,16 @@ class ClientReceiver {
   }
 
   void checkHeartbeat() {
-    _heartBeatTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _heartBeatTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (DateTime.now().difference(_lastHeartbeat) >
-          const Duration(seconds: 2)) {
+              const Duration(seconds: 3) &&
+          clientNum != null) {
         if (kDebugMode) {
           print("Heartbeat timed out, disconnecting.");
         }
         connected = false;
         timer.cancel();
-        if (clientNum > 1) {
+        if (clientNum! > 1) {
           ClientEvents.connectToNewServerEvent.broadcast();
         } else {
           ClientEvents.becomeServerEvent.broadcast();

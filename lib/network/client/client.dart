@@ -104,18 +104,19 @@ class LanClient {
     }).onDone(() {
       //When server is closed, if you are the next candidate , you will become server.
       //otherwise you will connect to new server.
-      try {
-        //_clientReceive?.clientNum -= 1;
-        print(
-            "Server Socket closed. New client number:${_clientReceive?.clientNum}");
-        if (_clientReceive!.clientNum <= 1) {
-          ClientEvents.becomeServerEvent.broadcast();
-        } else {
-          ClientEvents.connectToNewServerEvent.broadcast();
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print("Client is kicked.");
+      if (_clientReceive?.clientNum != null) {
+        try {
+          print(
+              "Server Socket closed. New client number:${_clientReceive?.clientNum}");
+          if (_clientReceive!.clientNum! <= 1) {
+            ClientEvents.becomeServerEvent.broadcast();
+          } else {
+            ClientEvents.connectToNewServerEvent.broadcast();
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print("Client is kicked.");
+          }
         }
       }
       _clientReceive?.stopHeartbeatTimer();

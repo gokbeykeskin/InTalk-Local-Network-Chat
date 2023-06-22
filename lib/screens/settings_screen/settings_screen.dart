@@ -242,18 +242,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _removeDeviceFromTrustedList(String deviceMAC, String username) {
     widget.server?.sendUntrustedDeviceToAll(deviceMAC);
-    // try {
-    //   widget.server?.kickUser(ContactsScreen.loggedInUsers
-    //       .firstWhere((element) => element.macAddress == deviceMAC)
-    //       .port!);
-    //   ContactsScreen.loggedInUsers.removeWhere(
-    //       (element) => element.macAddress == deviceMAC); //remove from list
-    // } catch (e) {
-    //   //untrusted device is not online.
-    //   if (kDebugMode) {
-    //     print("Untrusted Device is not online($e)");
-    //   }
-    // }
+    try {
+      widget.server?.kickUser(ContactsScreen.loggedInUsers
+          .firstWhere((element) => element.macAddress == deviceMAC)
+          .port!);
+      ContactsScreen.loggedInUsers.removeWhere(
+          (element) => element.macAddress == deviceMAC); //remove from list
+    } catch (e) {
+      //untrusted device is not online.
+      if (kDebugMode) {
+        print("Untrusted Device is not online($e)");
+      }
+    }
 
     setState(
       () {
